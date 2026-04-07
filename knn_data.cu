@@ -2,6 +2,10 @@
 #include <fstream>
 #include <vector>
 #include <cuda_runtime.h>
+#include <thrust/sort.h>
+#include <thrust/device_vector.h>
+#include <thrust/sequence.h>
+#include <thrust/execution_policy.h>
 
 #define CHECK_CUDA(call) do { \
     cudaError_t err = call; \
@@ -99,6 +103,46 @@ __global__ void kmeans_average(float* new_centroids, const int* counts) {
 }
 
 // ============================================================================
+// 5. CSR Offset Builder
+// Finds the boundaries where one cluster ends and the next begins
+// ============================================================================
+__global__ void build_cluster_offsets(const int* sorted_assignments, int* offsets, size_t num_vectors, int C) {
+    size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    // Handle the very first element and the absolute end boundary
+    if (tid == 0) {
+        offsets[C] = num_vectors;
+    } 
+    else if (tid < num_vectors) {
+        int my_c = sorted_assignments[tid];
+        int prev_c = sorted_assignments[tid - 1];
+        
+        // If the cluster ID changed, we found a boundary
+        if (my_c != prev_c) {
+            // Fill in the offsets for all clusters between prev_c and my_c
+            // (This handles empty clusters perfectly)
+            for (int c = prev_c + 1; c <= my_c; c++) {
+                offsets[c] = tid;
+            }
+        }
+    }
+}
+
+// ============================================================================
+// 6. Physical Reordering Kernel
+// Shuffles the raw floats so vectors in the same cluster sit contiguously
+// ============================================================================
+__global__ void reorder_vectors(const float* old_data, float* new_data, const int* sorted_indices, size_t num_vectors, int D) {
+    size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid < num_vectors) {
+        int old_vec_id = sorted_indices[tid];
+        for (int d = 0; d < D; d++) {
+            new_data[tid * D + d] = old_data[old_vec_id * D + d];
+        }
+    }
+}
+
+// ============================================================================
 // Main Execution
 // ============================================================================
 int main(int argc, char** argv) {
@@ -164,10 +208,48 @@ int main(int argc, char** argv) {
         
         printf("  Iteration %d complete.\n", iter + 1);
     }
+// ========================================================================
+    // 5. BUILD THE INVERTED INDEX (CSR)
+    // ========================================================================
+    printf("\nBuilding CSR Inverted Index...\n");
 
-    // 5. Write to Disk for BaM
-    printf("\nWriting data to disk for BaM backing store...\n");
+    // 5a. Full Assignment (100% of data)
+    int* d_full_assignments;
+    CHECK_CUDA(cudaMalloc(&d_full_assignments, num_vectors * sizeof(int)));
+    int full_blocks = (num_vectors + threads - 1) / threads;
+    kmeans_assign<<<full_blocks, threads>>>(d_data, d_centroids, d_full_assignments, num_vectors);
+    CHECK_CUDA(cudaDeviceSynchronize());
+
+    // 5b. Generate Sequence of Vector IDs (0, 1, 2, ... N-1)
+    int* d_vector_indices;
+    CHECK_CUDA(cudaMalloc(&d_vector_indices, num_vectors * sizeof(int)));
+    thrust::sequence(thrust::device, d_vector_indices, d_vector_indices + num_vectors);
+
+    // 5c. Sort IDs by Cluster Assignment
+    printf("  Sorting vector IDs by cluster...\n");
+    thrust::sort_by_key(thrust::device, d_full_assignments, d_full_assignments + num_vectors, d_vector_indices);
+
+    // 5d. Build Offsets
+    int* d_offsets;
+    CHECK_CUDA(cudaMalloc(&d_offsets, (C + 1) * sizeof(int)));
+    CHECK_CUDA(cudaMemset(d_offsets, 0, (C + 1) * sizeof(int))); // Default to 0 for empty clusters
     
+    build_cluster_offsets<<<full_blocks, threads>>>(d_full_assignments, d_offsets, num_vectors, C);
+    CHECK_CUDA(cudaDeviceSynchronize());
+
+    // 5e. Physically Reorder the Raw Vectors
+    printf("  Physically reordering raw data for BaM alignment...\n");
+    float* d_reordered_data;
+    CHECK_CUDA(cudaMalloc(&d_reordered_data, data_bytes));
+    reorder_vectors<<<full_blocks, threads>>>(d_data, d_reordered_data, d_vector_indices, num_vectors, D);
+    CHECK_CUDA(cudaDeviceSynchronize());
+
+    // ========================================================================
+    // 6. WRITE BINARY FILES TO DISK
+    // ========================================================================
+    printf("\nWriting CSR files to disk...\n");
+
+    // Centroids (C * D floats)
     std::vector<float> h_centroids(C * D);
     CHECK_CUDA(cudaMemcpy(h_centroids.data(), d_centroids, centroid_bytes, cudaMemcpyDeviceToHost));
     std::ofstream c_file("centroids.bin", std::ios::binary);
@@ -175,24 +257,47 @@ int main(int argc, char** argv) {
     c_file.close();
     printf("  -> Saved centroids.bin\n");
 
-    // We copy the data back in chunks so we don't blow up the Host RAM
+    // Offsets (C + 1 ints)
+    std::vector<int> h_offsets(C + 1);
+    CHECK_CUDA(cudaMemcpy(h_offsets.data(), d_offsets, (C + 1) * sizeof(int), cudaMemcpyDeviceToHost));
+    std::ofstream o_file("cluster_offsets.bin", std::ios::binary);
+    o_file.write(reinterpret_cast<char*>(h_offsets.data()), (C + 1) * sizeof(int));
+    o_file.close();
+    printf("  -> Saved cluster_offsets.bin\n");
+
+    // Vector Indices (N ints)
+    // (Note: Since we physically sorted the data, target_vec_id == its physical index,
+    // but we save this file so you know the ORIGINAL vector IDs to return to the user).
+    std::ofstream i_file("vector_indices.bin", std::ios::binary);
+    std::vector<int> h_idx_chunk(1000000);
+    size_t written = 0;
+    while (written < num_vectors) {
+        size_t chunk_size = std::min((size_t)1000000, num_vectors - written);
+        CHECK_CUDA(cudaMemcpy(h_idx_chunk.data(), d_vector_indices + written, chunk_size * sizeof(int), cudaMemcpyDeviceToHost));
+        i_file.write(reinterpret_cast<char*>(h_idx_chunk.data()), chunk_size * sizeof(int));
+        written += chunk_size;
+    }
+    i_file.close();
+    printf("  -> Saved vector_indices.bin\n");
+
+    // Reordered Raw Vectors (N * D floats)
     std::ofstream d_file("raw_vectors.bin", std::ios::binary);
-    std::vector<float> h_chunk(100000 * D); // 100k vectors at a time
-    size_t vectors_written = 0;
-    
-    while (vectors_written < num_vectors) {
-        size_t write_count = std::min((size_t)100000, num_vectors - vectors_written);
-        size_t bytes = write_count * D * sizeof(float);
-        CHECK_CUDA(cudaMemcpy(h_chunk.data(), d_data + (vectors_written * D), bytes, cudaMemcpyDeviceToHost));
-        d_file.write(reinterpret_cast<char*>(h_chunk.data()), bytes);
-        vectors_written += write_count;
+    std::vector<float> h_data_chunk(100000 * D);
+    written = 0;
+    while (written < num_vectors) {
+        size_t chunk_size = std::min((size_t)100000, num_vectors - written);
+        CHECK_CUDA(cudaMemcpy(h_data_chunk.data(), d_reordered_data + (written * D), chunk_size * D * sizeof(float), cudaMemcpyDeviceToHost));
+        d_file.write(reinterpret_cast<char*>(h_data_chunk.data()), chunk_size * D * sizeof(float));
+        written += chunk_size;
     }
     d_file.close();
-    printf("  -> Saved raw_vectors.bin\n");
+    printf("  -> Saved raw_vectors.bin (Physically sorted by cluster)\n");
 
     // Cleanup
     cudaFree(d_data); cudaFree(d_centroids); cudaFree(d_new_centroids);
     cudaFree(d_assignments); cudaFree(d_counts);
+    cudaFree(d_full_assignments); cudaFree(d_vector_indices); 
+    cudaFree(d_offsets); cudaFree(d_reordered_data);
 
     printf("Done.\n");
     return 0;

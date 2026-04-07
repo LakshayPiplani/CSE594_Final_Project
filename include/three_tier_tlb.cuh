@@ -29,7 +29,7 @@
 //   cache ref directly via cache_release_page.
 // ============================================================================
 
-#define T2_NUM_ENTRIES  256
+#define T2_NUM_ENTRIES  32
 #define T2_LOCK_BIT     0x80000000U   // VALID_ in real BaM
 #define T2_CNT_MASK     0x3fffffffU   // CNT_MASK_ in real BaM (30 bits)
 
@@ -237,6 +237,10 @@ void t1_fini(Tier1Local* t1, Tier2TLB* t2) {
         t2_release(t2, t1->t2_entry_idx, t1->page_id);
         t1->holding = false;
         t1->addr = nullptr;
+        t1->start_elem = 0;   
+        t1->end_elem = 0;
+        t1->t2_entry_idx = 0xFFFFFFFF;     
+        t1->page_id = 0xFFFFFFFF; 
     }
 }
 

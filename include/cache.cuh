@@ -313,10 +313,11 @@ next_slot:
 __device__ __forceinline__
 void cache_fill(BamCache* cache, uint32_t slot, uint32_t page_id,
                 const char* backing_store) {
-    const int* src = (const int*)(backing_store +
+    const int4* src = (const int4*)(backing_store +
                      (uint64_t)page_id * CACHE_LINE_SIZE);
-    int* dst = (int*)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE);
-    for (int i = 0; i < CL_ELEMS_INT; i++) {
+    int4* dst = (int4*)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE);
+    int num_int4_elements = CL_ELEMS_INT / 4;
+    for (int i = 0; i < num_int4_elements; i++) {
         dst[i] = src[i];
     }
     __threadfence();

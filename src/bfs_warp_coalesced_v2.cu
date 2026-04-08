@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cuda_runtime.h>
+#include <iostream>
 #include "cache.cuh"
 #include "three_tier_tlb.cuh"
 #include "graph.h"
@@ -274,8 +275,14 @@ void generate_row(const char* method, float ms, unsigned long long edges_accesse
     }
 
 int main(int argc, char** argv) {
-    int scale = 18;
+    int scale = 20;
+    float cache_perc = 1.0f;
     if (argc > 1) scale = atoi(argv[1]);
+    if (argc > 2) cache_perc = atof(argv[2]);
+    if (cache_perc <= 0.0f || cache_perc > 1.0f) {
+        std::cerr << "Error: cache_perc must be between 0.0 and 1.0 (got " << cache_perc << ")\n";
+        exit(1);
+    }
 
     printf("=== Warp-Coalesced BFS Benchmark (scale=%d) ===\n\n", scale);
 
@@ -302,9 +309,10 @@ int main(int argc, char** argv) {
     }
     printf("Source: %d (degree %d)\n", source, max_deg);
 
-    size_t cache_100 = (size_t)num_pages * CACHE_LINE_SIZE;
-    printf("Cache: 100%% = %u slots (%.1f MB)\n\n", num_pages,
-           (double)cache_100 / (1024*1024));
+    uint32_t num_cache_pages = (uint32_t)(num_pages * cache_perc);
+    size_t cache_bytes = (size_t)(num_cache_pages * CACHE_LINE_SIZE);
+    printf("Cache: %.1f %% = %u slots (%.1f MB)\n\n", cache_perc*100, num_cache_pages,
+           (double)cache_bytes / (1024*1024));
 
     
 
@@ -324,9 +332,9 @@ int main(int argc, char** argv) {
            warp_target.total_ms, warp_target.max_level, warp_target.nodes_reached, warp_target.edges_accessed);
 
     // --- Warp-coalesced BaM with three-tier TLB ---
-    printf("[3] Warp-coalesced BaM (3-tier TLB, 100%% cache)...\n");
+    printf("[3] Warp-coalesced BaM (3-tier TLB, %.1f %% cache)...\n", cache_perc*100);
     BFSResult warp_bam = run_bfs("Warp BaM", 0, h_edges, g.num_edges,
-                                  d_offsets, g.num_nodes, source, cache_100);
+                                  d_offsets, g.num_nodes, source, cache_bytes);
     printf("  %.2f ms, %d levels, %d reached, %llu edges accessed\n",
            warp_bam.total_ms, warp_bam.max_level, warp_bam.nodes_reached, warp_bam.edges_accessed);
     printf("  hits=%llu misses=%llu\n\n", warp_bam.hits, warp_bam.misses);

@@ -303,6 +303,7 @@ next_slot:
         __nanosleep(ns);
         if (ns < 256) ns *= 2;
 #endif
+;
     }
 }
 

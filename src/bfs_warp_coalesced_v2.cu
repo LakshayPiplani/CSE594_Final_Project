@@ -317,17 +317,21 @@ int main(int argc, char** argv) {
     
 
     // --- Per-node Target T (old baseline) ---
-    printf("[1] Per-node Target T...\n");
+    // printf("[1] Per-node Target T...\n");
 
-    BFSResult old_target = run_bfs("PerNode Target", 2, h_edges, g.num_edges,
-                                    d_offsets, g.num_nodes, source, 0);
-    printf("  %.2f ms, %d levels, %d reached, %llu edges accessed\n\n",
-           old_target.total_ms, old_target.max_level, old_target.nodes_reached, old_target.edges_accessed);
+    // BFSResult old_target = run_bfs("PerNode Target", 2, h_edges, g.num_edges,
+    //                                 d_offsets, g.num_nodes, source, 0);
+    // printf("  %.2f ms, %d levels, %d reached, %llu edges accessed\n\n",
+    //        old_target.total_ms, old_target.max_level, old_target.nodes_reached, old_target.edges_accessed);
 
     // --- Warp-coalesced Target T ---
     printf("[2] Warp-coalesced Target T...\n");
-    BFSResult warp_target = run_bfs("Warp Target", 1, h_edges, g.num_edges,
+    // BFSResult warp_target[100];
+    // for (int i = 0; i < 100; ++i) {
+        BFSResult warp_target = run_bfs("Warp Target", 1, h_edges, g.num_edges,
                                      d_offsets, g.num_nodes, source, 0);
+    // }n
+    // avg out warp_target
     printf("  %.2f ms, %d levels, %d reached, %llu edges accessed\n\n",
            warp_target.total_ms, warp_target.max_level, warp_target.nodes_reached, warp_target.edges_accessed);
 

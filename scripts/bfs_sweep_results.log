@@ -1,0 +1,182 @@
+=== Starting BFS Cache Sweep ===
+
+---------------------------------------------------
+Executing with cache percentage: 0.1
+---------------------------------------------------
+=== Warp-Coalesced BFS Benchmark (scale=20) ===
+
+Generating RMAT graph: scale=20, nodes=1048576, target_edges=16777216
+  After dedup: 31402868 directed edges (119.8 MB edge data)
+  Avg degree: 29.9, Max degree: 64292
+Graph: 1048576 nodes, 31402868 edges (119.8 MB)
+Source: 0 (degree 64292)
+Cache: 10.0 % = 3066 slots (12.0 MB)
+
+[1] Per-node Target T...
+  274.54 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[2] Warp-coalesced Target T...
+  33.46 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[3] Warp-coalesced BaM (3-tier TLB, 10.0 % cache)...
+  485.41 ms, 5 levels, 646226 reached, 31402484 edges accessed
+  hits=263414 misses=53518
+
+=== Correctness ===
+PASSED: All reach 646226 nodes in 5 levels
+
+=== Performance Summary ===
+Method                    | Time(ms)   | Edges Accessed | T1_Hits      | T2_Hits      | DRAM (~SSD) Access
+---------------------------------------------------------------------------------------------
+Per-node Target T         |     274.54 |     31402484 |     31402484 |            0 |            0
+Warp-coal Target T        |      33.46 |     31402484 |     31402484 |            0 |            0
+Warp-coal BaM 3T-TLB      |     485.41 |     31402484 |     31139070 |       263414 |        53518
+
+=== Done ===
+
+---------------------------------------------------
+Executing with cache percentage: 0.2
+---------------------------------------------------
+=== Warp-Coalesced BFS Benchmark (scale=20) ===
+
+Generating RMAT graph: scale=20, nodes=1048576, target_edges=16777216
+  After dedup: 31402868 directed edges (119.8 MB edge data)
+  Avg degree: 29.9, Max degree: 64292
+Graph: 1048576 nodes, 31402868 edges (119.8 MB)
+Source: 0 (degree 64292)
+Cache: 20.0 % = 6133 slots (24.0 MB)
+
+[1] Per-node Target T...
+  275.89 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[2] Warp-coalesced Target T...
+  35.07 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[3] Warp-coalesced BaM (3-tier TLB, 20.0 % cache)...
+  479.64 ms, 5 levels, 646226 reached, 31402484 edges accessed
+  hits=264729 misses=52203
+
+=== Correctness ===
+PASSED: All reach 646226 nodes in 5 levels
+
+=== Performance Summary ===
+Method                    | Time(ms)   | Edges Accessed | T1_Hits      | T2_Hits      | DRAM (~SSD) Access
+---------------------------------------------------------------------------------------------
+Per-node Target T         |     275.89 |     31402484 |     31402484 |            0 |            0
+Warp-coal Target T        |      35.07 |     31402484 |     31402484 |            0 |            0
+Warp-coal BaM 3T-TLB      |     479.64 |     31402484 |     31137755 |       264729 |        52203
+
+=== Done ===
+
+---------------------------------------------------
+Executing with cache percentage: 0.3
+---------------------------------------------------
+=== Warp-Coalesced BFS Benchmark (scale=20) ===
+
+Generating RMAT graph: scale=20, nodes=1048576, target_edges=16777216
+  After dedup: 31402868 directed edges (119.8 MB edge data)
+  Avg degree: 29.9, Max degree: 64292
+Graph: 1048576 nodes, 31402868 edges (119.8 MB)
+Source: 0 (degree 64292)
+Cache: 30.0 % = 9200 slots (35.9 MB)
+
+[1] Per-node Target T...
+  275.46 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[2] Warp-coalesced Target T...
+  33.39 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[3] Warp-coalesced BaM (3-tier TLB, 30.0 % cache)...
+  457.62 ms, 5 levels, 646226 reached, 31402484 edges accessed
+  hits=266192 misses=50740
+
+=== Correctness ===
+PASSED: All reach 646226 nodes in 5 levels
+
+=== Performance Summary ===
+Method                    | Time(ms)   | Edges Accessed | T1_Hits      | T2_Hits      | DRAM (~SSD) Access
+---------------------------------------------------------------------------------------------
+Per-node Target T         |     275.46 |     31402484 |     31402484 |            0 |            0
+Warp-coal Target T        |      33.39 |     31402484 |     31402484 |            0 |            0
+Warp-coal BaM 3T-TLB      |     457.62 |     31402484 |     31136292 |       266192 |        50740
+
+=== Done ===
+
+---------------------------------------------------
+Executing with cache percentage: 0.4
+---------------------------------------------------
+=== Warp-Coalesced BFS Benchmark (scale=20) ===
+
+Generating RMAT graph: scale=20, nodes=1048576, target_edges=16777216
+  After dedup: 31402868 directed edges (119.8 MB edge data)
+  Avg degree: 29.9, Max degree: 64292
+Graph: 1048576 nodes, 31402868 edges (119.8 MB)
+Source: 0 (degree 64292)
+Cache: 40.0 % = 12266 slots (47.9 MB)
+
+[1] Per-node Target T...
+  277.24 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[2] Warp-coalesced Target T...
+  35.14 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[3] Warp-coalesced BaM (3-tier TLB, 40.0 % cache)...
+  461.89 ms, 5 levels, 646226 reached, 31402484 edges accessed
+  hits=267452 misses=49480
+
+=== Correctness ===
+PASSED: All reach 646226 nodes in 5 levels
+
+=== Performance Summary ===
+Method                    | Time(ms)   | Edges Accessed | T1_Hits      | T2_Hits      | DRAM (~SSD) Access
+---------------------------------------------------------------------------------------------
+Per-node Target T         |     277.24 |     31402484 |     31402484 |            0 |            0
+Warp-coal Target T        |      35.14 |     31402484 |     31402484 |            0 |            0
+Warp-coal BaM 3T-TLB      |     461.89 |     31402484 |     31135032 |       267452 |        49480
+
+=== Done ===
+
+---------------------------------------------------
+Executing with cache percentage: 0.5
+---------------------------------------------------
+=== Warp-Coalesced BFS Benchmark (scale=20) ===
+
+Generating RMAT graph: scale=20, nodes=1048576, target_edges=16777216
+  After dedup: 31402868 directed edges (119.8 MB edge data)
+  Avg degree: 29.9, Max degree: 64292
+Graph: 1048576 nodes, 31402868 edges (119.8 MB)
+Source: 0 (degree 64292)
+Cache: 50.0 % = 15333 slots (59.9 MB)
+
+[1] Per-node Target T...
+  276.77 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[2] Warp-coalesced Target T...
+  34.61 ms, 5 levels, 646226 reached, 31402484 edges accessed
+
+[3] Warp-coalesced BaM (3-tier TLB, 50.0 % cache)...
+  449.87 ms, 5 levels, 646226 reached, 31402484 edges accessed
+  hits=268218 misses=48714
+
+=== Correctness ===
+PASSED: All reach 646226 nodes in 5 levels
+
+=== Performance Summary ===
+Method                    | Time(ms)   | Edges Accessed | T1_Hits      | T2_Hits      | DRAM (~SSD) Access
+---------------------------------------------------------------------------------------------
+Per-node Target T         |     276.77 |     31402484 |     31402484 |            0 |            0
+Warp-coal Target T        |      34.61 |     31402484 |     31402484 |            0 |            0
+Warp-coal BaM 3T-TLB      |     449.87 |     31402484 |     31134266 |       268218 |        48714
+
+=== Done ===
+
+Generating CSV Summary...
+=== CSV Summary ===
+Cache_Perc,Time_ms,T1_Hits,T2_Hits,DRAM_Access(Misses)
+0.1,485.41,31139070,263414,53518
+0.2,479.64,31137755,264729,52203
+0.3,457.62,31136292,266192,50740
+0.4,461.89,31135032,267452,49480
+0.5,449.87,31134266,268218,48714
+
+=== Sweep Complete. Log saved to bfs_sweep_results.log ===

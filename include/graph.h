@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <vector>
 #include <random>
+#include <omp.h>
+
 
 // ============================================================================
 // CSR (Compressed Sparse Row) graph representation
@@ -148,25 +150,57 @@ inline CSRGraph generate_simple_graph(int num_nodes, int avg_degree) {
     printf("Generating simple graph: nodes=%d, avg_degree=%d\n",
            num_nodes, avg_degree);
 
-    std::mt19937 rng(42);
+    // std::mt19937 rng(42);
     std::vector<std::pair<int,int>> edges;
+    int64_t num_edges_target = (int64_t)num_nodes * avg_degree / 2;
 
-    // Ring edges (ensure connectivity)
-    for (int i = 0; i < num_nodes; i++) {
-        int next = (i + 1) % num_nodes;
-        edges.push_back({i, next});
-        edges.push_back({next, i});
-    }
+    // // Ring edges (ensure connectivity)
+    // for (int i = 0; i < num_nodes; i++) {
+    //     int next = (i + 1) % num_nodes;
+    //     edges.push_back({i, next});
+    //     edges.push_back({next, i});
+    // }
 
-    // Random edges
-    std::uniform_int_distribution<int> node_dist(0, num_nodes - 1);
-    int64_t random_edges = (int64_t)num_nodes * avg_degree / 2;
-    for (int64_t e = 0; e < random_edges; e++) {
-        int u = node_dist(rng);
-        int v = node_dist(rng);
-        if (u != v) {
-            edges.push_back({u, v});
-            edges.push_back({v, u});
+    // // Random edges
+    // std::uniform_int_distribution<int> node_dist(0, num_nodes - 1);
+    // int64_t random_edges = (int64_t)num_nodes * avg_degree / 2;
+    // for (int64_t e = 0; e < random_edges; e++) {
+    //     int u = node_dist(rng);
+    //     int v = node_dist(rng);
+    //     if (u != v) {
+    //         edges.push_back({u, v});
+    //         edges.push_back({v, u});
+    //     }
+    // }
+
+    // 1. Pre-allocate the EXACT size using resize() instead of reserve()
+    // We multiply by 2 because each undirected edge creates 2 directed edges
+    edges.resize(num_edges_target * 2);
+
+    printf("Generating %lld edges across all CPU cores...\n", (long long)num_edges_target);
+
+    // 2. OpenMP Parallel For Loop
+    #pragma omp parallel 
+    {
+        // Give every thread its own local RNG seeded by its thread ID
+        int thread_id = omp_get_thread_num();
+        std::mt19937_64 local_rng(42 + thread_id); 
+        std::uniform_int_distribution<int> dist(0, num_nodes - 1);
+
+        #pragma omp for schedule(static)
+        for (int64_t e = 0; e < num_edges_target; e++) {
+            int u = dist(local_rng);
+            int v = dist(local_rng);
+            
+            // Prevent self-loops
+            while (u == v) {
+                v = dist(local_rng);
+            }
+
+            // 3. Write directly to the pre-calculated index without push_back
+            int64_t idx = e * 2;
+            edges[idx]     = {u, v};
+            edges[idx + 1] = {v, u};
         }
     }
 

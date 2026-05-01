@@ -1,0 +1,315 @@
+-> Running TPN = 1
+
+GENERATING GRAPH USING UNIFORM DISTRIBUTION...
+Generating Uniform graph: scale=20, nodes=1048576, target_degree=2048
+  After dedup: 2145386542 directed edges (8184.0 MB edge data)
+  Avg degree: 2046.0, Max degree: 2272
+  Degree Distribution -> Q1: 2015 | Median: 2046 | Q3: 2076
+
+======================================================================
+                  BFS BENCHMARK CONFIGURATION SUMMARY                     
+======================================================================
+[1] UNDIRECTED GRAPH TOPOLOGY
+    Generator Type   : uniform
+    Nodes            : 1048576
+    Total Degree (2*Undirected edges)   : 2145386542
+    Source Node      : 402064 (Degree: 2272)
+    Edge Array Size  : 8184.00 MB
+
+[2] MEMORY & CACHE HIERARCHY
+    T3 VRAM Cache Line (Page Size)    : 4096 Bytes
+    Elements per Cache Line    : 1024
+    Edge Array on Pinned DRAM: 2095105 pages | 8184.00 MB
+    VRAM BaM Cache For Edge Array    
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 209510 data slots in global VRAM | 818.40 MB
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Threads Per Node : 1
+    Threads Per Block: 128
+    Nodes Per Block  : 128
+    Total Threads    : 1048576 (per level)
+    Blocks Launched  : 8192 blocks (per level)
+    Launch Strategy  : All blocks launch every level
+======================================================================
+
+=======================================================================================================
+Method     | TPN  | Time (ms)  | Edges Acc    | T1 Hits      | T2/T3 Hits   | DRAM Misses  | Status
+-----------+------+------------+--------------+--------------+--------------+--------------+--------
+Target_T   | 1    |    8825.30 |   2145386542 | N/A          | N/A          | N/A          | REF   
+BaM        | 1    |    1483.81 |   2145386542 |   2142335083 |       930260 |      2121199 | PASS  
+=======================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running TPN = 4
+
+GENERATING GRAPH USING UNIFORM DISTRIBUTION...
+Generating Uniform graph: scale=20, nodes=1048576, target_degree=2048
+  After dedup: 2145386542 directed edges (8184.0 MB edge data)
+  Avg degree: 2046.0, Max degree: 2272
+  Degree Distribution -> Q1: 2015 | Median: 2046 | Q3: 2076
+
+======================================================================
+                  BFS BENCHMARK CONFIGURATION SUMMARY                     
+======================================================================
+[1] UNDIRECTED GRAPH TOPOLOGY
+    Generator Type   : uniform
+    Nodes            : 1048576
+    Total Degree (2*Undirected edges)   : 2145386542
+    Source Node      : 402064 (Degree: 2272)
+    Edge Array Size  : 8184.00 MB
+
+[2] MEMORY & CACHE HIERARCHY
+    T3 VRAM Cache Line (Page Size)    : 4096 Bytes
+    Elements per Cache Line    : 1024
+    Edge Array on Pinned DRAM: 2095105 pages | 8184.00 MB
+    VRAM BaM Cache For Edge Array    
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 209510 data slots in global VRAM | 818.40 MB
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Threads Per Node : 4
+    Threads Per Block: 128
+    Nodes Per Block  : 32
+    Total Threads    : 4194304 (per level)
+    Blocks Launched  : 32768 blocks (per level)
+    Launch Strategy  : All blocks launch every level
+======================================================================
+
+=======================================================================================================
+Method     | TPN  | Time (ms)  | Edges Acc    | T1 Hits      | T2/T3 Hits   | DRAM Misses  | Status
+-----------+------+------------+--------------+--------------+--------------+--------------+--------
+Target_T   | 4    |    4015.78 |   2145386542 | N/A          | N/A          | N/A          | REF   
+BaM        | 4    |    1461.56 |   2145386542 |   2142297081 |       968189 |      2121272 | PASS  
+=======================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running TPN = 8
+
+GENERATING GRAPH USING UNIFORM DISTRIBUTION...
+Generating Uniform graph: scale=20, nodes=1048576, target_degree=2048
+  After dedup: 2145386542 directed edges (8184.0 MB edge data)
+  Avg degree: 2046.0, Max degree: 2272
+  Degree Distribution -> Q1: 2015 | Median: 2046 | Q3: 2076
+
+======================================================================
+                  BFS BENCHMARK CONFIGURATION SUMMARY                     
+======================================================================
+[1] UNDIRECTED GRAPH TOPOLOGY
+    Generator Type   : uniform
+    Nodes            : 1048576
+    Total Degree (2*Undirected edges)   : 2145386542
+    Source Node      : 402064 (Degree: 2272)
+    Edge Array Size  : 8184.00 MB
+
+[2] MEMORY & CACHE HIERARCHY
+    T3 VRAM Cache Line (Page Size)    : 4096 Bytes
+    Elements per Cache Line    : 1024
+    Edge Array on Pinned DRAM: 2095105 pages | 8184.00 MB
+    VRAM BaM Cache For Edge Array    
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 209510 data slots in global VRAM | 818.40 MB
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Threads Per Node : 8
+    Threads Per Block: 128
+    Nodes Per Block  : 16
+    Total Threads    : 8388608 (per level)
+    Blocks Launched  : 65536 blocks (per level)
+    Launch Strategy  : All blocks launch every level
+======================================================================
+
+=======================================================================================================
+Method     | TPN  | Time (ms)  | Edges Acc    | T1 Hits      | T2/T3 Hits   | DRAM Misses  | Status
+-----------+------+------------+--------------+--------------+--------------+--------------+--------
+Target_T   | 8    |    3999.93 |   2145386542 | N/A          | N/A          | N/A          | REF   
+BaM        | 8    |    1460.34 |   2145386542 |   2142297020 |       968258 |      2121264 | PASS  
+=======================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running TPN = 16
+
+GENERATING GRAPH USING UNIFORM DISTRIBUTION...
+Generating Uniform graph: scale=20, nodes=1048576, target_degree=2048
+  After dedup: 2145386542 directed edges (8184.0 MB edge data)
+  Avg degree: 2046.0, Max degree: 2272
+  Degree Distribution -> Q1: 2015 | Median: 2046 | Q3: 2076
+
+======================================================================
+                  BFS BENCHMARK CONFIGURATION SUMMARY                     
+======================================================================
+[1] UNDIRECTED GRAPH TOPOLOGY
+    Generator Type   : uniform
+    Nodes            : 1048576
+    Total Degree (2*Undirected edges)   : 2145386542
+    Source Node      : 402064 (Degree: 2272)
+    Edge Array Size  : 8184.00 MB
+
+[2] MEMORY & CACHE HIERARCHY
+    T3 VRAM Cache Line (Page Size)    : 4096 Bytes
+    Elements per Cache Line    : 1024
+    Edge Array on Pinned DRAM: 2095105 pages | 8184.00 MB
+    VRAM BaM Cache For Edge Array    
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 209510 data slots in global VRAM | 818.40 MB
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Threads Per Node : 16
+    Threads Per Block: 128
+    Nodes Per Block  : 8
+    Total Threads    : 16777216 (per level)
+    Blocks Launched  : 131072 blocks (per level)
+    Launch Strategy  : All blocks launch every level
+======================================================================
+
+=======================================================================================================
+Method     | TPN  | Time (ms)  | Edges Acc    | T1 Hits      | T2/T3 Hits   | DRAM Misses  | Status
+-----------+------+------------+--------------+--------------+--------------+--------------+--------
+Target_T   | 16   |    1563.11 |   2145386542 | N/A          | N/A          | N/A          | REF   
+BaM        | 16   |    1373.37 |   2145386542 |   2143135370 |       129843 |      2121329 | PASS  
+=======================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running TPN = 32
+
+GENERATING GRAPH USING UNIFORM DISTRIBUTION...
+Generating Uniform graph: scale=20, nodes=1048576, target_degree=2048
+  After dedup: 2145386542 directed edges (8184.0 MB edge data)
+  Avg degree: 2046.0, Max degree: 2272
+  Degree Distribution -> Q1: 2015 | Median: 2046 | Q3: 2076
+
+======================================================================
+                  BFS BENCHMARK CONFIGURATION SUMMARY                     
+======================================================================
+[1] UNDIRECTED GRAPH TOPOLOGY
+    Generator Type   : uniform
+    Nodes            : 1048576
+    Total Degree (2*Undirected edges)   : 2145386542
+    Source Node      : 402064 (Degree: 2272)
+    Edge Array Size  : 8184.00 MB
+
+[2] MEMORY & CACHE HIERARCHY
+    T3 VRAM Cache Line (Page Size)    : 4096 Bytes
+    Elements per Cache Line    : 1024
+    Edge Array on Pinned DRAM: 2095105 pages | 8184.00 MB
+    VRAM BaM Cache For Edge Array    
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 209510 data slots in global VRAM | 818.40 MB
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Threads Per Node : 32
+    Threads Per Block: 128
+    Nodes Per Block  : 4
+    Total Threads    : 33554432 (per level)
+    Blocks Launched  : 262144 blocks (per level)
+    Launch Strategy  : All blocks launch every level
+======================================================================
+
+=======================================================================================================
+Method     | TPN  | Time (ms)  | Edges Acc    | T1 Hits      | T2/T3 Hits   | DRAM Misses  | Status
+-----------+------+------------+--------------+--------------+--------------+--------------+--------
+Target_T   | 32   |    1071.20 |   2145386542 | N/A          | N/A          | N/A          | REF   
+BaM        | 32   |    1339.94 |   2145386542 |   2143008006 |       257210 |      2121326 | PASS  
+=======================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running TPN = 64
+
+GENERATING GRAPH USING UNIFORM DISTRIBUTION...
+Generating Uniform graph: scale=20, nodes=1048576, target_degree=2048
+  After dedup: 2145386542 directed edges (8184.0 MB edge data)
+  Avg degree: 2046.0, Max degree: 2272
+  Degree Distribution -> Q1: 2015 | Median: 2046 | Q3: 2076
+
+======================================================================
+                  BFS BENCHMARK CONFIGURATION SUMMARY                     
+======================================================================
+[1] UNDIRECTED GRAPH TOPOLOGY
+    Generator Type   : uniform
+    Nodes            : 1048576
+    Total Degree (2*Undirected edges)   : 2145386542
+    Source Node      : 402064 (Degree: 2272)
+    Edge Array Size  : 8184.00 MB
+
+[2] MEMORY & CACHE HIERARCHY
+    T3 VRAM Cache Line (Page Size)    : 4096 Bytes
+    Elements per Cache Line    : 1024
+    Edge Array on Pinned DRAM: 2095105 pages | 8184.00 MB
+    VRAM BaM Cache For Edge Array    
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 209510 data slots in global VRAM | 818.40 MB
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Threads Per Node : 64
+    Threads Per Block: 128
+    Nodes Per Block  : 2
+    Total Threads    : 67108864 (per level)
+    Blocks Launched  : 524288 blocks (per level)
+    Launch Strategy  : All blocks launch every level
+======================================================================
+
+=======================================================================================================
+Method     | TPN  | Time (ms)  | Edges Acc    | T1 Hits      | T2/T3 Hits   | DRAM Misses  | Status
+-----------+------+------------+--------------+--------------+--------------+--------------+--------
+Target_T   | 64   |    1084.42 |   2145386542 | N/A          | N/A          | N/A          | REF   
+BaM        | 64   |    1386.36 |   2145386542 |   2142753346 |       511863 |      2121333 | PASS  
+=======================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running TPN = 128
+
+GENERATING GRAPH USING UNIFORM DISTRIBUTION...
+Generating Uniform graph: scale=20, nodes=1048576, target_degree=2048
+  After dedup: 2145386542 directed edges (8184.0 MB edge data)
+  Avg degree: 2046.0, Max degree: 2272
+  Degree Distribution -> Q1: 2015 | Median: 2046 | Q3: 2076
+
+======================================================================
+                  BFS BENCHMARK CONFIGURATION SUMMARY                     
+======================================================================
+[1] UNDIRECTED GRAPH TOPOLOGY
+    Generator Type   : uniform
+    Nodes            : 1048576
+    Total Degree (2*Undirected edges)   : 2145386542
+    Source Node      : 402064 (Degree: 2272)
+    Edge Array Size  : 8184.00 MB
+
+[2] MEMORY & CACHE HIERARCHY
+    T3 VRAM Cache Line (Page Size)    : 4096 Bytes
+    Elements per Cache Line    : 1024
+    Edge Array on Pinned DRAM: 2095105 pages | 8184.00 MB
+    VRAM BaM Cache For Edge Array    
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 209510 data slots in global VRAM | 818.40 MB
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Threads Per Node : 128
+    Threads Per Block: 128
+    Nodes Per Block  : 1
+    Total Threads    : 134217728 (per level)
+    Blocks Launched  : 1048576 blocks (per level)
+    Launch Strategy  : All blocks launch every level
+======================================================================
+
+=======================================================================================================
+Method     | TPN  | Time (ms)  | Edges Acc    | T1 Hits      | T2/T3 Hits   | DRAM Misses  | Status
+-----------+------+------------+--------------+--------------+--------------+--------------+--------
+Target_T   | 128  |    1009.86 |   2145386542 | N/A          | N/A          | N/A          | REF   
+BaM        | 128  |    1303.04 |   2145386542 |   2142243866 |      1021346 |      2121330 | PASS  
+=======================================================================================================
+
+=== Done ===
+------------------------------------------

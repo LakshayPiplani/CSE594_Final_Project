@@ -1,0 +1,156 @@
+-> Running WPQ = 1
+
+======================================================================
+                  ANN BENCHMARK CONFIGURATION SUMMARY                   
+======================================================================
+[1] IVF-FLAT DATASET TOPOLOGY
+    Total Vectors    : 4194304
+    Vector Dimension : 128
+    Clusters         : 1024
+    Target Probes    : 10
+    Total Queries    : 100
+
+[2] MEMORY & CACHE HIERARCHY
+    Centroids        : 0.50 MB (VRAM)
+    Cluster Offsets  : 0.00 MB (VRAM)
+    T3 Cache Line    : 4096 Bytes (1024 floats)
+    Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Launch Strategy  : 1 Thread Block per Query
+    Warps per Query  : 1
+    Threads per Block: 32
+    Blocks Spawned   : 100
+======================================================================
+
+Loading data from disk...
+
+=================================================================================================
+Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
+-----------+------+-----------+--------+------------+--------------+--------------+--------
+Target_T   | 1    | 32        | 100    |     166.94 | N/A          | N/A          | REF   
+BaM        | 1    | 32        | 100    |     379.43 |       129995 |       391470 | PASS  
+=================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running WPQ = 2
+
+======================================================================
+                  ANN BENCHMARK CONFIGURATION SUMMARY                   
+======================================================================
+[1] IVF-FLAT DATASET TOPOLOGY
+    Total Vectors    : 4194304
+    Vector Dimension : 128
+    Clusters         : 1024
+    Target Probes    : 10
+    Total Queries    : 100
+
+[2] MEMORY & CACHE HIERARCHY
+    Centroids        : 0.50 MB (VRAM)
+    Cluster Offsets  : 0.00 MB (VRAM)
+    T3 Cache Line    : 4096 Bytes (1024 floats)
+    Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Launch Strategy  : 1 Thread Block per Query
+    Warps per Query  : 2
+    Threads per Block: 64
+    Blocks Spawned   : 100
+======================================================================
+
+Loading data from disk...
+
+=================================================================================================
+Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
+-----------+------+-----------+--------+------------+--------------+--------------+--------
+Target_T   | 2    | 64        | 100    |     163.54 | N/A          | N/A          | REF   
+BaM        | 2    | 64        | 100    |     291.84 |       479707 |       401877 | PASS  
+=================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running WPQ = 4
+
+======================================================================
+                  ANN BENCHMARK CONFIGURATION SUMMARY                   
+======================================================================
+[1] IVF-FLAT DATASET TOPOLOGY
+    Total Vectors    : 4194304
+    Vector Dimension : 128
+    Clusters         : 1024
+    Target Probes    : 10
+    Total Queries    : 100
+
+[2] MEMORY & CACHE HIERARCHY
+    Centroids        : 0.50 MB (VRAM)
+    Cluster Offsets  : 0.00 MB (VRAM)
+    T3 Cache Line    : 4096 Bytes (1024 floats)
+    Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Launch Strategy  : 1 Thread Block per Query
+    Warps per Query  : 4
+    Threads per Block: 128
+    Blocks Spawned   : 100
+======================================================================
+
+Loading data from disk...
+
+=================================================================================================
+Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
+-----------+------+-----------+--------+------------+--------------+--------------+--------
+Target_T   | 4    | 128       | 100    |     163.27 | N/A          | N/A          | REF   
+BaM        | 4    | 128       | 100    |     381.42 |       518884 |       584570 | PASS  
+=================================================================================================
+
+=== Done ===
+------------------------------------------
+-> Running WPQ = 8
+
+======================================================================
+                  ANN BENCHMARK CONFIGURATION SUMMARY                   
+======================================================================
+[1] IVF-FLAT DATASET TOPOLOGY
+    Total Vectors    : 4194304
+    Vector Dimension : 128
+    Clusters         : 1024
+    Target Probes    : 10
+    Total Queries    : 100
+
+[2] MEMORY & CACHE HIERARCHY
+    Centroids        : 0.50 MB (VRAM)
+    Cluster Offsets  : 0.00 MB (VRAM)
+    T3 Cache Line    : 4096 Bytes (1024 floats)
+    Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
+    T3 Cache Target  : 10.0%
+    T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
+    T2 Capacity      : 32 mapping slots shared per block
+
+[3] HARDWARE EXECUTION PARAMETERS
+    Launch Strategy  : 1 Thread Block per Query
+    Warps per Query  : 8
+    Threads per Block: 256
+    Blocks Spawned   : 100
+======================================================================
+
+Loading data from disk...
+
+=================================================================================================
+Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
+-----------+------+-----------+--------+------------+--------------+--------------+--------
+Target_T   | 8    | 256       | 100    |     163.39 | N/A          | N/A          | REF   
+BaM        | 8    | 256       | 100    |     512.54 |       345293 |       736942 | PASS  
+=================================================================================================
+
+=== Done ===
+------------------------------------------

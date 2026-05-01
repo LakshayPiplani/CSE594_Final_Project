@@ -230,6 +230,7 @@ BFSResult dispatch_target(int tpn, const int* h_edges, const int* d_offsets,
     switch (tpn) {
         case 1:   return run_target_tpn<1>(h_edges, d_offsets, num_nodes, source);
         case 4:   return run_target_tpn<4>(h_edges, d_offsets, num_nodes, source);
+        case 8:   return run_target_tpn<4>(h_edges, d_offsets, num_nodes, source);
         case 16:  return run_target_tpn<16>(h_edges, d_offsets, num_nodes, source);
         case 32:  return run_target_tpn<32>(h_edges, d_offsets, num_nodes, source);
         case 64:  return run_target_tpn<64>(h_edges, d_offsets, num_nodes, source);
@@ -246,6 +247,7 @@ BFSResult dispatch_bam(int tpn, const int* h_edges, const int* d_offsets,
     switch (tpn) {
         case 1:   return run_bam_tpn<1>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
         case 4:   return run_bam_tpn<4>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
+        case 8:   return run_bam_tpn<4>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
         case 16:  return run_bam_tpn<16>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
         case 32:  return run_bam_tpn<32>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
         case 64:  return run_bam_tpn<64>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
@@ -318,7 +320,7 @@ int main(int argc, char** argv) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("  --scale <N>    : Graph scale (2^N nodes). Default: %i\n", scale);
             printf("  --cache <F>    : VRAM cache percentage (0.0 to 1.0). Default: %.2f\n", cache_perc);
-            printf("  --tpn <N>      : Threads Per Node (1, 4, 16, 32, 64, 128). Default: %i\n", tpn);
+            printf("  --tpn <N>      : Threads Per Node (1, 4, 8, 16, 32, 64, 128). Default: %i\n", tpn);
             printf("  --target_edges <N>      : Degree Per Node. Default: %i\n", target_edges);
             printf("  --graph_type <String> : 'uniform' or 'rmat'. Default: %s\n", graph_type.c_str());
             exit(0);

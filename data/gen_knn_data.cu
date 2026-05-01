@@ -6,6 +6,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/sequence.h>
 #include <thrust/execution_policy.h>
+#include <algorithm>
 
 #define CHECK_CUDA(call) do { \
     cudaError_t err = call; \
@@ -298,6 +299,58 @@ int main(int argc, char** argv) {
     cudaFree(d_assignments); cudaFree(d_counts);
     cudaFree(d_full_assignments); cudaFree(d_vector_indices); 
     cudaFree(d_offsets); cudaFree(d_reordered_data);
+
+    // ========================================================================
+    // ANALYZE CLUSTER DISTRIBUTION
+    // ========================================================================
+    printf("\nAnalyzing Cluster Size Distribution...\n");
+    int min_size = num_vectors;
+    int max_size = 0;
+    int empty_clusters = 0;
+
+    // Create a vector to hold the sizes so we can sort them
+    std::vector<int> cluster_sizes(C);
+
+    std::ofstream dist_file("cluster_distribution.csv");
+    dist_file << "ClusterID,Size\n";
+
+    for (int c = 0; c < C; c++) {
+        int cluster_size = h_offsets[c + 1] - h_offsets[c];
+        cluster_sizes[c] = cluster_size;
+        
+        dist_file << c << "," << cluster_size << "\n";
+
+        if (cluster_size < min_size) min_size = cluster_size;
+        if (cluster_size > max_size) max_size = cluster_size;
+        if (cluster_size == 0) empty_clusters++;
+    }
+    dist_file.close();
+
+    // Sort the array from smallest to largest
+    std::sort(cluster_sizes.begin(), cluster_sizes.end());
+
+    // Helper lambda to safely calculate median of a sub-array
+    auto get_median = [](const std::vector<int>& v, int start, int end) -> double {
+        int len = end - start;
+        if (len % 2 == 0) {
+            return (v[start + len / 2 - 1] + v[start + len / 2]) / 2.0;
+        } else {
+            return v[start + len / 2];
+        }
+    };
+
+    // Calculate percentiles
+    double median = get_median(cluster_sizes, 0, C);
+    double q1     = get_median(cluster_sizes, 0, C / 2);
+    double q3     = get_median(cluster_sizes, C - (C / 2), C);
+
+    printf("  Min Cluster Size : %d vectors\n", min_size);
+    printf("  Q1 (25th Perc.)  : %.1f vectors\n", q1);
+    printf("  Median (50th)    : %.1f vectors\n", median);
+    printf("  Q3 (75th Perc.)  : %.1f vectors\n", q3);
+    printf("  Max Cluster Size : %d vectors\n", max_size);
+    printf("  Avg Cluster Size : %zu vectors\n", num_vectors / C);
+    printf("  Empty Clusters   : %d\n", empty_clusters);
 
     printf("Done.\n");
     return 0;

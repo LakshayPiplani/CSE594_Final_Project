@@ -5,7 +5,6 @@
 #include <iostream>
 #include "cache.cuh"
 #include "three_tier_tlb.cuh"
-#include "graph.h"
 
 #define CHECK_CUDA(call) do { \
     cudaError_t err = call; \
@@ -22,12 +21,6 @@
 // Templatized BFS kernels
 //
 // TPN = Threads Per Node
-//   TPN=1:  one thread per node, no edge-level parallelism
-//   TPN=4:  4 threads stride through each node's edges
-//   TPN=16: half-warp per node
-//   TPN=32: full warp per node (real BaM style, maximum coalescing)
-//   TPN=64: two warps per node
-//   TPN=128: full block per node
 //
 // nodeIdx = tid / TPN       (which node)
 // laneIdx = tid % TPN       (which sub-thread within the node's group)
@@ -118,7 +111,7 @@ struct BFSResult {
 
 template <int TPN>
 BFSResult run_target_tpn(const int* h_edges, const int* d_offsets,
-                          int num_nodes, int source) {
+                          int num_nodes, int source, int blk) {
     BFSResult r = {};
     int* d_dist;
     CHECK_CUDA(cudaMalloc(&d_dist, num_nodes * sizeof(int)));
@@ -130,7 +123,6 @@ BFSResult run_target_tpn(const int* h_edges, const int* d_offsets,
     CHECK_CUDA(cudaMalloc(&d_ea, sizeof(unsigned long long)));
     CHECK_CUDA(cudaMemset(d_ea, 0, sizeof(unsigned long long)));
 
-    int blk = 128;
     int64_t total = (int64_t)num_nodes * TPN;
     int grd = (int)((total + blk - 1) / blk);
 
@@ -166,7 +158,7 @@ BFSResult run_target_tpn(const int* h_edges, const int* d_offsets,
 template <int TPN>
 BFSResult run_bam_tpn(const int* h_edges, const int* d_offsets,
                        int num_nodes, int64_t num_edges, int source,
-                       size_t cache_bytes, uint32_t num_pages) {
+                       size_t cache_bytes, uint32_t num_pages, int blk) {
     BFSResult r = {};
     BamCache cache;
     cache_init(&cache, cache_bytes, num_pages);
@@ -181,7 +173,6 @@ BFSResult run_bam_tpn(const int* h_edges, const int* d_offsets,
     CHECK_CUDA(cudaMalloc(&d_ea, sizeof(unsigned long long)));
     CHECK_CUDA(cudaMemset(d_ea, 0, sizeof(unsigned long long)));
 
-    int blk = 128;
     int64_t total = (int64_t)num_nodes * TPN;
     int grd = (int)((total + blk - 1) / blk);
 
@@ -226,15 +217,25 @@ BFSResult run_bam_tpn(const int* h_edges, const int* d_offsets,
 // ============================================================================
 
 BFSResult dispatch_target(int tpn, const int* h_edges, const int* d_offsets,
-                           int num_nodes, int source) {
+                           int num_nodes, int source, int blk) {
     switch (tpn) {
-        case 1:   return run_target_tpn<1>(h_edges, d_offsets, num_nodes, source);
-        case 4:   return run_target_tpn<4>(h_edges, d_offsets, num_nodes, source);
-        case 8:   return run_target_tpn<4>(h_edges, d_offsets, num_nodes, source);
-        case 16:  return run_target_tpn<16>(h_edges, d_offsets, num_nodes, source);
-        case 32:  return run_target_tpn<32>(h_edges, d_offsets, num_nodes, source);
-        case 64:  return run_target_tpn<64>(h_edges, d_offsets, num_nodes, source);
-        case 128: return run_target_tpn<128>(h_edges, d_offsets, num_nodes, source);
+        case 1:   return run_target_tpn<1>(h_edges, d_offsets, num_nodes, source, blk);
+        case 2:   return run_target_tpn<2>(h_edges, d_offsets, num_nodes, source, blk);
+        case 4:   return run_target_tpn<4>(h_edges, d_offsets, num_nodes, source, blk);
+        case 8:   return run_target_tpn<8>(h_edges, d_offsets, num_nodes, source, blk);
+        case 16:  return run_target_tpn<16>(h_edges, d_offsets, num_nodes, source, blk);
+        case 32:  return run_target_tpn<32>(h_edges, d_offsets, num_nodes, source, blk);
+        case 64:  return run_target_tpn<64>(h_edges, d_offsets, num_nodes, source, blk);
+        case 96:  return run_target_tpn<96>(h_edges, d_offsets, num_nodes, source, blk);
+        case 128: return run_target_tpn<128>(h_edges, d_offsets, num_nodes, source, blk);
+        case 160: return run_target_tpn<160>(h_edges, d_offsets, num_nodes, source, blk);
+        case 192: return run_target_tpn<192>(h_edges, d_offsets, num_nodes, source, blk);
+        case 224: return run_target_tpn<224>(h_edges, d_offsets, num_nodes, source, blk);
+        case 256: return run_target_tpn<256>(h_edges, d_offsets, num_nodes, source, blk);
+        case 288: return run_target_tpn<288>(h_edges, d_offsets, num_nodes, source, blk);
+        case 320: return run_target_tpn<320>(h_edges, d_offsets, num_nodes, source, blk);
+        case 512: return run_target_tpn<512>(h_edges, d_offsets, num_nodes, source, blk);
+        case 1024: return run_target_tpn<1024>(h_edges, d_offsets, num_nodes, source, blk);
         default:
             fprintf(stderr, "Unsupported TPN=%d\n", tpn);
             exit(1);
@@ -243,15 +244,25 @@ BFSResult dispatch_target(int tpn, const int* h_edges, const int* d_offsets,
 
 BFSResult dispatch_bam(int tpn, const int* h_edges, const int* d_offsets,
                         int num_nodes, int64_t num_edges, int source,
-                        size_t cache_bytes, uint32_t num_pages) {
+                        size_t cache_bytes, uint32_t num_pages, int blk) {
     switch (tpn) {
-        case 1:   return run_bam_tpn<1>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
-        case 4:   return run_bam_tpn<4>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
-        case 8:   return run_bam_tpn<4>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
-        case 16:  return run_bam_tpn<16>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
-        case 32:  return run_bam_tpn<32>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
-        case 64:  return run_bam_tpn<64>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
-        case 128: return run_bam_tpn<128>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages);
+        case 1:   return run_bam_tpn<1>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 2:   return run_bam_tpn<2>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 4:   return run_bam_tpn<4>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 8:   return run_bam_tpn<8>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 16:  return run_bam_tpn<16>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 32:  return run_bam_tpn<32>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 64:  return run_bam_tpn<64>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 96:  return run_bam_tpn<96>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 128: return run_bam_tpn<128>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 160:  return run_bam_tpn<160>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 192:  return run_bam_tpn<192>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 224:  return run_bam_tpn<224>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 256:  return run_bam_tpn<256>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 288:  return run_bam_tpn<288>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 320:  return run_bam_tpn<320>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 512:  return run_bam_tpn<512>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
+        case 1024:  return run_bam_tpn<1024>(h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
         default:
             fprintf(stderr, "Unsupported TPN=%d\n", tpn);
             exit(1);
@@ -288,41 +299,40 @@ void print_result_row(const char* method, int tpn, float ms, unsigned long long 
            method, tpn, ms, edges_accessed, t1_hits, t2_t3_hits, dram_misses, status);
 }
 
+
+int load_binary(const std::string& filename, void* ptr, size_t bytes) {
+    FILE* f = fopen(filename.c_str(), "rb");
+    if (!f) { fprintf(stderr, "Failed to open %s\n", filename.c_str()); return 1; }
+    size_t read = fread(ptr, 1, bytes, f);
+    if (read != bytes) { fprintf(stderr, "Read error in %s\n", filename.c_str()); return 1; }
+    fclose(f);
+    return 0;
+}
+
 // ============================================================================
 // Main
 // ============================================================================
 
 int main(int argc, char** argv) {
-    int scale = 20;
     float cache_perc = 1.0f;
     int tpn = 32;
-    int target_edges = 2048;
-    std::string graph_type = "uniform";
+    std::string data_dir = "./data/";
+    int blk = 1024;
 
     // Manual named argument parsing loop
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
-            scale = atoi(argv[++i]); // increment 'i' to grab the value, then advance
-        } 
-        else if (strcmp(argv[i], "--cache_perc") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--cache_perc") == 0 && i + 1 < argc) {
             cache_perc = atof(argv[++i]);
         } 
         else if (strcmp(argv[i], "--tpn") == 0 && i + 1 < argc) {
             tpn = atoi(argv[++i]);
         } 
-            else if (strcmp(argv[i], "--target_edges") == 0 && i + 1 < argc) {
-            target_edges = atoi(argv[++i]);
-        } 
-        else if (strcmp(argv[i], "--graph_type") == 0 && i + 1 < argc) {
-            graph_type = argv[++i];
-        }
+        else if (strcmp(argv[i], "--data_dir") == 0 && i + 1 < argc) data_dir = argv[++i];
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
-            printf("  --scale <N>    : Graph scale (2^N nodes). Default: %i\n", scale);
             printf("  --cache <F>    : VRAM cache percentage (0.0 to 1.0). Default: %.2f\n", cache_perc);
-            printf("  --tpn <N>      : Threads Per Node (1, 4, 8, 16, 32, 64, 128). Default: %i\n", tpn);
-            printf("  --target_edges <N>      : Degree Per Node. Default: %i\n", target_edges);
-            printf("  --graph_type <String> : 'uniform' or 'rmat'. Default: %s\n", graph_type.c_str());
+            printf("  --tpn <N>      : Threads Per Node (1, 4, 8, 16, 32, 64, 12, ...8). Default: %i\n", tpn);
+            printf("  --data_dir <N> : Data Directory relative to project root. Default: %s\n", data_dir.c_str());
             exit(0);
         } 
         else {
@@ -332,39 +342,45 @@ int main(int argc, char** argv) {
         }
     }
 
+    if (data_dir.back() != '/') data_dir += "/";
+
 
     if (cache_perc <= 0.0f || cache_perc > 1.0f) {
         std::cerr << "Error: cache_perc must be between 0.0 and 1.0\n";
         exit(1);
     }
-    CSRGraph g;
-    if (graph_type == "uniform") {
-        printf("\nGENERATING GRAPH USING UNIFORM DISTRIBUTION...\n");
-        g = generate_uniform_graph(scale, target_edges);
-    }
-    else if (graph_type == "rmat") {
-        printf("\nGENERATING GRAPH USING RMAT DISTRIBUTION...\n");
-        g = generate_rmat_graph(scale, target_edges);
-    }
-    else {
-        fprintf(stderr, "Error: Invalid graph type '%s'. Must be 'uniform' or 'rmat'.\n", graph_type.c_str());
-        exit(1);
-    }
-    
-    uint32_t num_pages = (g.num_edges + CL_ELEMS_INT - 1) / CL_ELEMS_INT;
 
-    int source = 0, max_deg = 0;
-    for (int i = 0; i < g.num_nodes; i++) {
-        int deg = g.row_offsets[i+1] - g.row_offsets[i];
-        if (deg > max_deg) { max_deg = deg; source = i; }
-    }
+    // 1. Load Metadata
+    int64_t metadata[4];
+    if (load_binary(data_dir + "metadata.bin", metadata, sizeof(metadata))) return 1;
+    int num_nodes = metadata[0];
+    int64_t num_edges = metadata[1];
+    int source = metadata[2];
+    int max_deg = metadata[3];
 
+    size_t offsets_bytes = (num_nodes + 1) * sizeof(int);
+    size_t edges_bytes = num_edges * sizeof(int);
+
+    // 2. Load Offsets into VRAM
+    int* d_offsets;
+    CHECK_CUDA(cudaMalloc(&d_offsets, offsets_bytes));
+    int* h_offsets = (int*)malloc(offsets_bytes);
+    if (load_binary(data_dir + "offsets.bin", h_offsets, offsets_bytes)) return 1;
+    CHECK_CUDA(cudaMemcpy(d_offsets, h_offsets, offsets_bytes, cudaMemcpyHostToDevice));
+    free(h_offsets);
+
+    // 3. Load Edges into Pinned DRAM (Simulated SSD)
+    int* h_edges;
+    CHECK_CUDA(cudaHostAlloc(&h_edges, edges_bytes, cudaHostAllocDefault));
+    if (load_binary(data_dir + "edges.bin", h_edges, edges_bytes)) return 1;
+
+    uint32_t num_pages = (num_edges + CL_ELEMS_INT - 1) / CL_ELEMS_INT;
     uint32_t num_cache_pages = (uint32_t)(num_pages * cache_perc);
     size_t cache_bytes = (size_t)num_cache_pages * CACHE_LINE_SIZE;
 
-    int nodes_per_block = 128 / tpn;
-    int64_t total_threads = (int64_t)g.num_nodes * tpn;
-    int blocks = (int)((total_threads + 128 - 1) / 128);
+    int nodes_per_block = blk / tpn;
+    int64_t total_threads = (int64_t)num_nodes * tpn;
+    int blocks = (int)((total_threads + blk - 1) / blk);
 
     
     printf("\n======================================================================\n");
@@ -372,16 +388,15 @@ int main(int argc, char** argv) {
     printf("======================================================================\n");
     
     printf("[1] UNDIRECTED GRAPH TOPOLOGY\n");
-    printf("    Generator Type   : %s\n", graph_type.c_str());
-    printf("    Nodes            : %d\n", g.num_nodes);
-    printf("    Total Degree (2*Undirected edges)   : %lld\n", (long long)g.num_edges);
+    printf("    Nodes            : %d\n", num_nodes);
+    printf("    Total Degree (2*Undirected edges)   : %lld\n", (long long)num_edges);
     printf("    Source Node      : %d (Degree: %d)\n", source, max_deg);
-    printf("    Edge Array Size  : %.2f MB\n", (double)g.edges_size_bytes / (1024*1024));
+    printf("    Edge Array Size  : %.2f MB\n", (double)edges_bytes / (1024*1024));
     
     printf("\n[2] MEMORY & CACHE HIERARCHY\n");
     printf("    T3 VRAM Cache Line (Page Size)    : %d Bytes\n", CACHE_LINE_SIZE);
     printf("    Elements per Cache Line    : %d\n", CL_ELEMS_INT);
-    printf("    Edge Array on Pinned DRAM: %u pages | %.2f MB\n", num_pages, (double)g.edges_size_bytes / (1024*1024));
+    printf("    Edge Array on Pinned DRAM: %u pages | %.2f MB\n", num_pages, (double)edges_bytes / (1024*1024));
     printf("    VRAM BaM Cache For Edge Array    \n");
     printf("    T3 Cache Target  : %.1f%%\n", cache_perc * 100);
     printf("    T3 Capacity      : %u data slots in global VRAM | %.2f MB\n", num_cache_pages, (double)cache_bytes / (1024*1024));
@@ -389,24 +404,12 @@ int main(int argc, char** argv) {
     
     printf("\n[3] HARDWARE EXECUTION PARAMETERS\n");
     printf("    Threads Per Node : %d\n", tpn);
-    printf("    Threads Per Block: 128\n");
+    printf("    Threads Per Block: %d\n", blk);
     printf("    Nodes Per Block  : %d\n", nodes_per_block);
     printf("    Total Threads    : %lld (per level)\n", (long long)total_threads);
     printf("    Blocks Launched  : %d blocks (per level)\n", blocks);
     printf("    Launch Strategy  : All blocks launch every level\n");
     printf("======================================================================\n");
-
-    int* h_edges;
-    CHECK_CUDA(cudaHostAlloc(&h_edges, g.edges_size_bytes, cudaHostAllocDefault));
-    memcpy(h_edges, g.col_indices, g.edges_size_bytes);
-
-    int* d_offsets;
-    CHECK_CUDA(cudaMalloc(&d_offsets, g.offsets_size_bytes));
-    CHECK_CUDA(cudaMemcpy(d_offsets, g.row_offsets, g.offsets_size_bytes,
-                           cudaMemcpyHostToDevice));
-
-
-
 
     
 
@@ -415,7 +418,7 @@ int main(int argc, char** argv) {
     int ref_reached = -1, ref_levels = -1;
 
     // --- Run Target T ---
-    BFSResult rt = dispatch_target(tpn, h_edges, d_offsets, g.num_nodes, source);
+    BFSResult rt = dispatch_target(tpn, h_edges, d_offsets, num_nodes, source, blk);
     
     ref_reached = rt.nodes_reached;
     ref_levels = rt.max_level;
@@ -423,7 +426,7 @@ int main(int argc, char** argv) {
     print_result_row("Target_T", tpn, rt.total_ms, rt.edges_accessed, 0, 0, "REF");
 
     // --- Run BaM ---
-    BFSResult rb = dispatch_bam(tpn, h_edges, d_offsets, g.num_nodes, g.num_edges, source, cache_bytes, num_pages);
+    BFSResult rb = dispatch_bam(tpn, h_edges, d_offsets, num_nodes, num_edges, source, cache_bytes, num_pages, blk);
     
     const char* correct = "FAIL";
     if (rb.nodes_reached == ref_reached && rb.max_level == ref_levels) {
@@ -436,7 +439,6 @@ int main(int argc, char** argv) {
     
     cudaFreeHost(h_edges);
     cudaFree(d_offsets);
-    free_graph(&g);
 
     printf("\n=== Done ===\n");
     return 0;

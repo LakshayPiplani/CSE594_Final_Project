@@ -148,7 +148,23 @@ __global__ void reorder_vectors(const float* old_data, float* new_data, const in
 // ============================================================================
 int main(int argc, char** argv) {
     int scale = 20; // Default: 2^20 = ~1 Million vectors
-    if (argc > 1) scale = atoi(argv[1]);
+    std::string data_dir = "./data";
+
+        for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--data_dir") == 0 && i + 1 < argc) {
+            data_dir = std::string(argv[++i]);
+        } 
+        else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
+            scale = atoi(argv[++i]);
+        } 
+ 
+        else {
+            printf("Usage: %s [options]\n", argv[0]);
+            printf("  --data_dir <path>   : Data directory\n");
+            printf("  --scale <N>    : Number of vectors (2^N). Default: 20\n");
+            exit(0);
+        }
+    }
 
     size_t num_vectors = 1ULL << scale;
     size_t num_samples = num_vectors / 2; // 50% sample

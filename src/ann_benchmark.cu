@@ -459,8 +459,8 @@ std::string data_dir = "../data";
     int wpq = 4; // Warps Per Query (default to 4 warps = 128 threads)
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--dir") == 0 && i + 1 < argc) {
-            data_dir = std::string(argv[++i]) + "/";
+        if (strcmp(argv[i], "--data_dir") == 0 && i + 1 < argc) {
+            data_dir = std::string(argv[++i]);
         } 
         else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
             num_vectors = 1ULL << atoi(argv[++i]);
@@ -473,7 +473,7 @@ std::string data_dir = "../data";
         } 
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
-            printf("  --dir <path>   : Data directory\n");
+            printf("  --data_dir <path>   : Data directory\n");
             printf("  --scale <N>    : Number of vectors (2^N). Default: 20\n");
             printf("  --cache <F>    : VRAM cache percentage (0.0 to 1.0). Default: 1.0\n");
             printf("  --wpq <N>      : Warps Per Query (1, 2, 3, 4...). Default: 4\n");
@@ -485,6 +485,8 @@ std::string data_dir = "../data";
         std::cerr << "Error: wpq must be between 1 and 32\n";
         exit(1);
     }
+
+    if (data_dir.back() != '/') data_dir += "/";
 
     // Convert warps to threads
     int blk_threads = wpq * 32;

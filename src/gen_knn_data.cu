@@ -265,19 +265,21 @@ int main(int argc, char** argv) {
     // 6. WRITE BINARY FILES TO DISK
     // ========================================================================
     printf("\nWriting CSR files to disk...\n");
+    std::string centroids_file = data_dir + "centroids.bin";
 
     // Centroids (C * D floats)
     std::vector<float> h_centroids(C * D);
     CHECK_CUDA(cudaMemcpy(h_centroids.data(), d_centroids, centroid_bytes, cudaMemcpyDeviceToHost));
-    std::ofstream c_file("centroids.bin", std::ios::binary);
+    std::ofstream c_file(centroids_file, std::ios::binary);
     c_file.write(reinterpret_cast<char*>(h_centroids.data()), centroid_bytes);
     c_file.close();
     printf("  -> Saved centroids.bin\n");
 
     // Offsets (C + 1 ints)
+    std::string offsets_file = data_dir + "cluster_offsets.bin";
     std::vector<int> h_offsets(C + 1);
     CHECK_CUDA(cudaMemcpy(h_offsets.data(), d_offsets, (C + 1) * sizeof(int), cudaMemcpyDeviceToHost));
-    std::ofstream o_file("cluster_offsets.bin", std::ios::binary);
+    std::ofstream o_file(offsets_file, std::ios::binary);
     o_file.write(reinterpret_cast<char*>(h_offsets.data()), (C + 1) * sizeof(int));
     o_file.close();
     printf("  -> Saved cluster_offsets.bin\n");
@@ -285,7 +287,8 @@ int main(int argc, char** argv) {
     // Vector Indices (N ints)
     // (Note: Since we physically sorted the data, target_vec_id == its physical index,
     // but we save this file so you know the ORIGINAL vector IDs to return to the user).
-    std::ofstream i_file("vector_indices.bin", std::ios::binary);
+    std::string vec_idx_file = data_dir + "vector_indices.bin";
+    std::ofstream i_file(vec_idx_file, std::ios::binary);
     std::vector<int> h_idx_chunk(1000000);
     size_t written = 0;
     while (written < num_vectors) {
@@ -298,7 +301,8 @@ int main(int argc, char** argv) {
     printf("  -> Saved vector_indices.bin\n");
 
     // Reordered Raw Vectors (N * D floats)
-    std::ofstream d_file("raw_vectors.bin", std::ios::binary);
+    std::string vec_file = data_dir + "raw_vectors.bin";
+    std::ofstream d_file(vec_file, std::ios::binary);
     std::vector<float> h_data_chunk(100000 * D);
     written = 0;
     while (written < num_vectors) {

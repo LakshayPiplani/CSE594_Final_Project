@@ -551,10 +551,26 @@ std::string data_dir = "../data";
     float* h_raw_vectors;
     if (load_to_pinned(data_dir + "raw_vectors.bin", (void**)&h_raw_vectors, raw_vectors_bytes)) return 1;
 
-    // Setup queries
+
+    // ============================
+    // Setup queries (Strided Sampling)
+    // ============================
+    float* h_queries = (float*)malloc(NUM_QUERIES * VEC_DIM * sizeof(float));
+    
+    // Calculate the stride to evenly sample across the whole dataset
+    size_t stride = num_vectors / NUM_QUERIES;
+    
+    for (int i = 0; i < NUM_QUERIES; i++) {
+        size_t source_vec_id = i * stride;
+        memcpy(&h_queries[i * VEC_DIM], 
+               &h_raw_vectors[source_vec_id * VEC_DIM], 
+               VEC_DIM * sizeof(float));
+    }
+
     float* d_queries;
     CHECK_CUDA(cudaMalloc(&d_queries, NUM_QUERIES * VEC_DIM * sizeof(float)));
-    CHECK_CUDA(cudaMemcpy(d_queries, h_raw_vectors, NUM_QUERIES * VEC_DIM * sizeof(float), cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_queries, h_queries, NUM_QUERIES * VEC_DIM * sizeof(float), cudaMemcpyHostToDevice));
+    free(h_queries);
 
     // ============================
     // Step 1: Find top-NPROBE clusters per query

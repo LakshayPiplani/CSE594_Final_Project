@@ -6,6 +6,7 @@
 #include <cfloat>
 #include "cache.cuh"
 #include "three_tier_tlb.cuh"
+#include "bam_ptr.cuh"
 
 #define CHECK_CUDA(call) do { \
     cudaError_t err = call; \
@@ -259,6 +260,92 @@ void search_clusters_bam(BamCache cache, const float* d_queries,
 }
 
 // ============================================================================
+// Kernel: Search clusters using BaM two-tier (T1 → T3 direct, no shared TLB)
+// ============================================================================
+
+__global__
+void search_clusters_bam_2t(BamCache cache, const float* d_queries,
+                              const int* d_top_clusters, const int* d_offsets,
+                              int* d_result_ids, float* d_result_dists,
+                              int num_queries, const char* backing) {
+    int qid = blockIdx.x;
+    if (qid >= num_queries) return;
+
+    int lane = threadIdx.x;
+    const float* query = &d_queries[qid * VEC_DIM];
+
+    float best_dist = FLT_MAX;
+    int   best_id   = -1;
+
+    BamPtr bp;
+    bp_init(&bp);
+
+    for (int p = 0; p < NPROBE; p++) {
+        int cluster_id = d_top_clusters[qid * NPROBE + p];
+        if (cluster_id < 0) continue;
+
+        int vec_start = d_offsets[cluster_id];
+        int vec_end   = d_offsets[cluster_id + 1];
+        int cluster_size = vec_end - vec_start;
+
+        for (int v = lane; v < cluster_size; v += blockDim.x) {
+            int vec_id = vec_start + v;
+            int float_base = vec_id * VEC_DIM;
+
+            float dist = 0.0f;
+            for (int d = 0; d < VEC_DIM; d++) {
+                int fidx = float_base + d;
+                int raw = bp_read(&bp, &cache, fidx, backing);
+                float val = __int_as_float(raw);
+                float diff = query[d] - val;
+                dist += diff * diff;
+            }
+
+            if (dist < best_dist) {
+                best_dist = dist;
+                best_id = vec_id;
+            }
+        }
+    }
+
+    bp_fini(&bp, &cache);
+
+    for (int offset = 16; offset > 0; offset /= 2) {
+        float other_dist = __shfl_down_sync(0xFFFFFFFF, best_dist, offset);
+        int   other_id   = __shfl_down_sync(0xFFFFFFFF, best_id, offset);
+        if (other_dist < best_dist) {
+            best_dist = other_dist;
+            best_id = other_id;
+        }
+    }
+
+    __shared__ float s_dists[32];
+    __shared__ int   s_ids[32];
+    int warp_id   = threadIdx.x / 32;
+    int warp_lane = threadIdx.x % 32;
+
+    if (warp_lane == 0) {
+        s_dists[warp_id] = best_dist;
+        s_ids[warp_id]   = best_id;
+    }
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
+        float absolute_best_dist = s_dists[0];
+        int   absolute_best_id   = s_ids[0];
+        int num_warps = blockDim.x / 32;
+        for (int i = 1; i < num_warps; i++) {
+            if (s_dists[i] < absolute_best_dist) {
+                absolute_best_dist = s_dists[i];
+                absolute_best_id   = s_ids[i];
+            }
+        }
+        d_result_ids[qid]   = absolute_best_id;
+        d_result_dists[qid] = absolute_best_dist;
+    }
+}
+
+// ============================================================================
 // Kernel: Search clusters using Target T (direct PCIe reads)
 // ============================================================================
 
@@ -457,28 +544,38 @@ std::string data_dir = "../data";
     size_t num_vectors = 1 << 20;
     float cache_perc = 1.0f;
     int wpq = 4; // Warps Per Query (default to 4 warps = 128 threads)
+    int tlb_mode = 3; // 3 = three-tier (default), 2 = two-tier
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--data_dir") == 0 && i + 1 < argc) {
             data_dir = std::string(argv[++i]);
-        } 
+        }
         else if (strcmp(argv[i], "--scale") == 0 && i + 1 < argc) {
             num_vectors = 1ULL << atoi(argv[++i]);
-        } 
+        }
         else if (strcmp(argv[i], "--cache") == 0 && i + 1 < argc) {
             cache_perc = atof(argv[++i]);
-        } 
+        }
         else if (strcmp(argv[i], "--wpq") == 0 && i + 1 < argc) {
             wpq = atoi(argv[++i]);
-        } 
+        }
+        else if (strcmp(argv[i], "--tlb") == 0 && i + 1 < argc) {
+            tlb_mode = atoi(argv[++i]);
+        }
         else if (strcmp(argv[i], "--help") == 0 || strcmp(argv[i], "-h") == 0) {
             printf("Usage: %s [options]\n", argv[0]);
             printf("  --data_dir <path>   : Data directory\n");
             printf("  --scale <N>    : Number of vectors (2^N). Default: 20\n");
             printf("  --cache <F>    : VRAM cache percentage (0.0 to 1.0). Default: 1.0\n");
             printf("  --wpq <N>      : Warps Per Query (1, 2, 3, 4...). Default: 4\n");
+            printf("  --tlb <N>      : TLB mode (2 = two-tier, 3 = three-tier). Default: 3\n");
             exit(0);
         }
+    }
+
+    if (tlb_mode != 2 && tlb_mode != 3) {
+        std::cerr << "Error: --tlb must be 2 or 3\n";
+        exit(1);
     }
 
     if (wpq < 1 || wpq > 32) {
@@ -617,7 +714,7 @@ std::string data_dir = "../data";
     CHECK_CUDA(cudaMemcpy(h_target_ids, d_result_ids, NUM_QUERIES * sizeof(int), cudaMemcpyDeviceToHost));
 
     // ============================
-    // Step 3: Search — BaM 
+    // Step 3: Search — BaM
     // ============================
     float bam_ms = 0.0f;
     {
@@ -629,29 +726,33 @@ std::string data_dir = "../data";
         CHECK_CUDA(cudaEventCreate(&t1));
 
         CHECK_CUDA(cudaEventRecord(t0));
-        search_clusters_bam<<<NUM_QUERIES, blk_threads>>>(
-            cache, d_queries, d_top_clusters, d_offsets,
-            d_result_ids, d_result_dists, NUM_QUERIES,
-            (const char*)h_raw_vectors);
+        if (tlb_mode == 2) {
+            search_clusters_bam_2t<<<NUM_QUERIES, blk_threads>>>(
+                cache, d_queries, d_top_clusters, d_offsets,
+                d_result_ids, d_result_dists, NUM_QUERIES,
+                (const char*)h_raw_vectors);
+        } else {
+            search_clusters_bam<<<NUM_QUERIES, blk_threads>>>(
+                cache, d_queries, d_top_clusters, d_offsets,
+                d_result_ids, d_result_dists, NUM_QUERIES,
+                (const char*)h_raw_vectors);
+        }
         CHECK_CUDA(cudaEventRecord(t1));
         CHECK_CUDA(cudaEventSynchronize(t1));
         CHECK_CUDA(cudaEventElapsedTime(&bam_ms, t0, t1));
 
         CacheStats s = cache_get_stats(&cache);
 
-        // Verification
         int* h_bam_ids = (int*)malloc(NUM_QUERIES * sizeof(int));
         CHECK_CUDA(cudaMemcpy(h_bam_ids, d_result_ids, NUM_QUERIES * sizeof(int), cudaMemcpyDeviceToHost));
-        
+
         const char* status = "PASS";
         for (int i = 0; i < NUM_QUERIES; i++) {
-            if (h_target_ids[i] != h_bam_ids[i]) {
-                status = "FAIL";
-                break;
-            }
+            if (h_target_ids[i] != h_bam_ids[i]) { status = "FAIL"; break; }
         }
 
-        print_result_row("BaM", wpq, blk_threads, NUM_QUERIES, bam_ms, s.hits, s.misses, status);
+        const char* method = (tlb_mode == 2) ? "BaM_2T" : "BaM";
+        print_result_row(method, wpq, blk_threads, NUM_QUERIES, bam_ms, s.hits, s.misses, status);
 
         free(h_bam_ids);
         cache_destroy(&cache);

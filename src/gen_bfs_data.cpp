@@ -23,9 +23,9 @@ int main(int argc, char** argv) {
     
     CSRGraph g;
     if (graph_type == "uniform") {
-        g = generate_uniform_graph(scale, target_degree);
+        g = generate_uniform_graph(scale, target_degree, out_dir);
     } else if (graph_type == "rmat") {
-        g = generate_rmat_graph(scale, target_degree);
+        g = generate_rmat_graph(scale, target_degree, out_dir);
     } else {
         printf("Invalid graph type.\n"); exit(1);
     }

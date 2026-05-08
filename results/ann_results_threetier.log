@@ -17,7 +17,7 @@
     Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
     T3 Cache Target  : 10.0%
     T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
-    T2 Capacity      : 32 mapping slots shared per block
+    T2 Capacity      : 128 mapping slots shared per block
 
 [3] HARDWARE EXECUTION PARAMETERS
     Launch Strategy  : 1 Thread Block per Query
@@ -31,8 +31,8 @@ Loading data from disk...
 =================================================================================================
 Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
 -----------+------+-----------+--------+------------+--------------+--------------+--------
-Target_T   | 1    | 32        | 100    |     170.58 | N/A          | N/A          | REF   
-BaM_2T     | 1    | 32        | 100    |     385.00 |       693363 |       450913 | PASS  
+Target_T   | 1    | 32        | 100    |     170.61 | N/A          | N/A          | REF   
+BaM        | 1    | 32        | 100    |     425.74 |        58294 |       455132 | PASS  
 =================================================================================================
 
 === Done ===
@@ -56,7 +56,7 @@ BaM_2T     | 1    | 32        | 100    |     385.00 |       693363 |       45091
     Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
     T3 Cache Target  : 10.0%
     T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
-    T2 Capacity      : 32 mapping slots shared per block
+    T2 Capacity      : 128 mapping slots shared per block
 
 [3] HARDWARE EXECUTION PARAMETERS
     Launch Strategy  : 1 Thread Block per Query
@@ -70,8 +70,8 @@ Loading data from disk...
 =================================================================================================
 Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
 -----------+------+-----------+--------+------------+--------------+--------------+--------
-Target_T   | 2    | 64        | 100    |     170.47 | N/A          | N/A          | REF   
-BaM_2T     | 2    | 64        | 100    |     350.25 |       627593 |       477483 | PASS  
+Target_T   | 2    | 64        | 100    |     170.07 | N/A          | N/A          | REF   
+BaM        | 2    | 64        | 100    |     320.99 |       165921 |       459224 | PASS  
 =================================================================================================
 
 === Done ===
@@ -95,7 +95,7 @@ BaM_2T     | 2    | 64        | 100    |     350.25 |       627593 |       47748
     Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
     T3 Cache Target  : 10.0%
     T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
-    T2 Capacity      : 32 mapping slots shared per block
+    T2 Capacity      : 128 mapping slots shared per block
 
 [3] HARDWARE EXECUTION PARAMETERS
     Launch Strategy  : 1 Thread Block per Query
@@ -109,8 +109,8 @@ Loading data from disk...
 =================================================================================================
 Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
 -----------+------+-----------+--------+------------+--------------+--------------+--------
-Target_T   | 4    | 128       | 100    |     170.60 | N/A          | N/A          | REF   
-BaM_2T     | 4    | 128       | 100    |     325.82 |       575684 |       483246 | PASS  
+Target_T   | 4    | 128       | 100    |     170.31 | N/A          | N/A          | REF   
+BaM        | 4    | 128       | 100    |     302.35 |       263927 |       473177 | PASS  
 =================================================================================================
 
 === Done ===
@@ -134,7 +134,7 @@ BaM_2T     | 4    | 128       | 100    |     325.82 |       575684 |       48324
     Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
     T3 Cache Target  : 10.0%
     T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
-    T2 Capacity      : 32 mapping slots shared per block
+    T2 Capacity      : 128 mapping slots shared per block
 
 [3] HARDWARE EXECUTION PARAMETERS
     Launch Strategy  : 1 Thread Block per Query
@@ -148,8 +148,8 @@ Loading data from disk...
 =================================================================================================
 Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
 -----------+------+-----------+--------+------------+--------------+--------------+--------
-Target_T   | 8    | 256       | 100    |     170.30 | N/A          | N/A          | REF   
-BaM_2T     | 8    | 256       | 100    |     314.09 |       522421 |       464357 | PASS  
+Target_T   | 8    | 256       | 100    |     170.25 | N/A          | N/A          | REF   
+BaM        | 8    | 256       | 100    |     330.50 |       312966 |       478164 | PASS  
 =================================================================================================
 
 === Done ===
@@ -173,7 +173,7 @@ BaM_2T     | 8    | 256       | 100    |     314.09 |       522421 |       46435
     Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
     T3 Cache Target  : 10.0%
     T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
-    T2 Capacity      : 32 mapping slots shared per block
+    T2 Capacity      : 128 mapping slots shared per block
 
 [3] HARDWARE EXECUTION PARAMETERS
     Launch Strategy  : 1 Thread Block per Query
@@ -187,48 +187,10 @@ Loading data from disk...
 =================================================================================================
 Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
 -----------+------+-----------+--------+------------+--------------+--------------+--------
-Target_T   | 16   | 512       | 100    |     170.34 | N/A          | N/A          | REF   
-BaM_2T     | 16   | 512       | 100    |     326.02 |       474684 |       463028 | PASS  
+Target_T   | 16   | 512       | 100    |     170.23 | N/A          | N/A          | REF   
+BaM        | 16   | 512       | 100    |     405.17 |       326846 |       604700 | PASS  
 =================================================================================================
 
 === Done ===
 ------------------------------------------
 -> Running WPQ = 32
-
-======================================================================
-                  ANN BENCHMARK CONFIGURATION SUMMARY                   
-======================================================================
-[1] IVF-FLAT DATASET TOPOLOGY
-    Total Vectors    : 4194304
-    Vector Dimension : 128
-    Clusters         : 1024
-    Target Probes    : 10
-    Total Queries    : 100
-
-[2] MEMORY & CACHE HIERARCHY
-    Centroids        : 512.00 KB (VRAM)
-    Cluster Offsets  : 4.00 KB (VRAM)
-    T3 Cache Line    : 4096 Bytes (1024 floats)
-    Raw Vectors      : 524288 pages | 2048.00 MB (Pinned DRAM)
-    T3 Cache Target  : 10.0%
-    T3 Capacity      : 52428 pages | 204.80 MB (Global VRAM)
-    T2 Capacity      : 32 mapping slots shared per block
-
-[3] HARDWARE EXECUTION PARAMETERS
-    Launch Strategy  : 1 Thread Block per Query
-    Warps per Query  : 32
-    Threads per Block: 1024
-    Blocks Spawned   : 100
-======================================================================
-
-Loading data from disk...
-
-=================================================================================================
-Method     | WPQ  | Threads/Q | Blocks | Time (ms)  | VRAM Hits    | DRAM Misses  | Status
------------+------+-----------+--------+------------+--------------+--------------+--------
-Target_T   | 32   | 1024      | 100    |     170.23 | N/A          | N/A          | REF   
-BaM_2T     | 32   | 1024      | 100    |     324.93 |       381467 |       456865 | PASS  
-=================================================================================================
-
-=== Done ===
-------------------------------------------

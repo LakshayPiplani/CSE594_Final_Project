@@ -5,10 +5,10 @@ DATA_DIR=/scratch/ljp5718/bfs_data
 SCALE=20
 TARGET_DEGREE=2048
 CACHE_PERC=0.1
-TLB_MODE=3
+TLB_MODE=2
 
-LOG_FILE="./results/bfs_tpn_sweep_threetier.log"
-CSV_FILE="./results/bfs_results_threetier.csv"
+LOG_FILE="./results/bfs_tpn_sweep_twotier.log"
+CSV_FILE="./results/bfs_results_twotier.csv"
 
 
 echo "=========================================="

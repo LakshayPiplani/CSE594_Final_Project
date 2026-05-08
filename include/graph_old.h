@@ -8,7 +8,6 @@
 #include <algorithm>
 #include <vector>
 #include <random>
-#include <string>
 #include <omp.h>
 
 
@@ -41,7 +40,6 @@ struct CSRGraph {
 // ============================================================================
 
 inline CSRGraph generate_rmat_graph(int scale, int edge_factor,
-                                     const std::string& out_dir,
                                      double a = 0.57, double b = 0.19,
                                      double c = 0.19, double d = 0.05) {
     uint64_t num_nodes = 1 << scale;
@@ -54,36 +52,38 @@ inline CSRGraph generate_rmat_graph(int scale, int edge_factor,
     std::mt19937_64 rng(42);
     std::uniform_real_distribution<double> dist(0.0, 1.0);
 
-    // Pack each directed edge as uint64_t: (u << 32) | v — halves staging memory
-    std::vector<uint64_t> edges;
-    edges.reserve(num_edges_target * 2);
+    // Use vectors for edge list, then convert to CSR
+    std::vector<std::pair<int,int>> edges;
+    edges.reserve(num_edges_target);
 
-    for (int64_t e = 0; e < (int64_t)num_edges_target; e++) {
-        uint32_t u = 0, v = 0;
+    for (int64_t e = 0; e < num_edges_target; e++) {
+        int u = 0, v = 0;
         for (int level = scale - 1; level >= 0; level--) {
             double r = dist(rng);
             if (r < a) {
                 // quadrant (0,0)
             } else if (r < a + b) {
-                v |= (1u << level);
+                v |= (1 << level);
             } else if (r < a + b + c) {
-                u |= (1u << level);
+                u |= (1 << level);
             } else {
-                u |= (1u << level);
-                v |= (1u << level);
+                u |= (1 << level);
+                v |= (1 << level);
             }
         }
-        if (u != v) {
-            edges.push_back(((uint64_t)u << 32) | v);
-            edges.push_back(((uint64_t)v << 32) | u);
+        if (u != v) {  // no self-loops
+            edges.push_back({u, v});
+            edges.push_back({v, u});  // undirected
         }
     }
 
+    // Sort by source node
     std::sort(edges.begin(), edges.end());
-    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
-    edges.shrink_to_fit();
 
-    int64_t num_edges = (int64_t)edges.size();
+    // Remove duplicates
+    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+
+    int64_t num_edges = edges.size();
     printf("  After dedup: %lld directed edges (%.1f MB edge data)\n",
            (long long)num_edges,
            (double)num_edges * sizeof(int) / (1024*1024));
@@ -93,59 +93,31 @@ inline CSRGraph generate_rmat_graph(int scale, int edge_factor,
     g.num_nodes = num_nodes;
     g.num_edges = num_edges;
     g.offsets_size_bytes = (num_nodes + 1) * sizeof(uint32_t);
-    g.edges_size_bytes = (size_t)num_edges * sizeof(int);
+    g.edges_size_bytes = num_edges * sizeof(int);
 
     g.row_offsets = (uint32_t*)malloc(g.offsets_size_bytes);
-    if (!g.row_offsets) {
-        fprintf(stderr, "Fatal: malloc failed for row_offsets (%zu MB)\n", g.offsets_size_bytes >> 20);
-        exit(1);
-    }
+    g.col_indices = (int*)malloc(g.edges_size_bytes);
+
     memset(g.row_offsets, 0, g.offsets_size_bytes);
 
-    // Build row_offsets (prefix sum) from edges
-    for (int64_t i = 0; i < num_edges; i++) {
-        uint32_t src = (uint32_t)(edges[i] >> 32);
-        g.row_offsets[src + 1]++;
+    // Count degrees
+    for (uint64_t i = 0; i < num_edges; i++) {
+        g.row_offsets[edges[i].first + 1]++;
     }
+
+    // Prefix sum
     for (uint64_t i = 1; i <= num_nodes; i++) {
         g.row_offsets[i] += g.row_offsets[i-1];
     }
 
-    // Spill dst values (already in CSR order since edges is sorted) to disk,
-    // then free edges before allocating col_indices to avoid peak RAM overlap
-    std::string tmp_path = out_dir + "edges_tmp.bin";
-    {
-        FILE* tmp = fopen(tmp_path.c_str(), "wb");
-        if (!tmp) { fprintf(stderr, "Fatal: cannot open %s\n", tmp_path.c_str()); exit(1); }
-        // Write in chunks to avoid per-element call overhead
-        const int64_t CHUNK = 1 << 20; // 1M edges per chunk
-        std::vector<int> buf(CHUNK);
-        for (int64_t i = 0; i < num_edges; i += CHUNK) {
-            int64_t count = std::min(CHUNK, num_edges - i);
-            for (int64_t j = 0; j < count; j++)
-                buf[j] = (int)(edges[i + j] & 0xFFFFFFFF);
-            fwrite(buf.data(), sizeof(int), count, tmp);
-        }
-        fclose(tmp);
-    }
-    { std::vector<uint64_t>().swap(edges); }
-
-    g.col_indices = (int*)malloc(g.edges_size_bytes);
-    if (!g.col_indices) {
-        fprintf(stderr, "Fatal: malloc failed for col_indices (%zu MB)\n", g.edges_size_bytes >> 20);
-        remove(tmp_path.c_str());
-        exit(1);
-    }
-    {
-        FILE* tmp = fopen(tmp_path.c_str(), "rb");
-        if (!tmp) { fprintf(stderr, "Fatal: cannot reopen %s\n", tmp_path.c_str()); exit(1); }
-        size_t n = fread(g.col_indices, sizeof(int), num_edges, tmp);
-        fclose(tmp);
-        remove(tmp_path.c_str());
-        if ((int64_t)n != num_edges) {
-            fprintf(stderr, "Fatal: read %zu edges, expected %lld\n", n, (long long)num_edges);
-            exit(1);
-        }
+    // Fill col_indices
+    std::vector<uint32_t> current_pos(num_nodes, 0);
+    for (int64_t i = 0; i < num_edges; i++) {
+        int src = edges[i].first;
+        int dst = edges[i].second;
+        uint32_t pos = g.row_offsets[src] + current_pos[src];
+        g.col_indices[pos] = dst;
+        current_pos[src]++;
     }
 
 // Print stats
@@ -270,7 +242,7 @@ inline CSRGraph generate_simple_graph(int num_nodes, int avg_degree) {
 // Eliminates the power-law skew that causes warp starvation.
 // ============================================================================
 
-inline CSRGraph generate_uniform_graph(int scale, int target_degree, const std::string& out_dir) {
+inline CSRGraph generate_uniform_graph(int scale, int target_degree) {
     int num_nodes = 1 << scale;
     // We divide by 2 because each undirected edge adds 2 directed edges later
     int64_t num_edges_target = (int64_t)num_nodes * target_degree / 2;
@@ -278,27 +250,27 @@ inline CSRGraph generate_uniform_graph(int scale, int target_degree, const std::
     printf("Generating Uniform graph: scale=%d, nodes=%d, target_degree=%d\n",
            scale, num_nodes, target_degree);
 
-    // Pack each directed edge as uint64_t: (u << 32) | v — halves staging memory
     std::mt19937_64 rng(42);
-    std::uniform_int_distribution<uint32_t> dist(0, (uint32_t)num_nodes - 1);
+    std::uniform_int_distribution<int> dist(0, num_nodes - 1);
 
-    std::vector<uint64_t> edges;
-    edges.reserve((size_t)num_edges_target * 2);
+    std::vector<std::pair<int,int>> edges;
+    edges.reserve(num_edges_target * 2);
 
+    // Generate random uniformly distributed edges
     for (int64_t e = 0; e < num_edges_target; e++) {
-        uint32_t u = dist(rng);
-        uint32_t v = dist(rng);
+        int u = dist(rng);
+        int v = dist(rng);
         if (u != v) {
-            edges.push_back(((uint64_t)u << 32) | v);
-            edges.push_back(((uint64_t)v << 32) | u);
+            edges.push_back({u, v});
+            edges.push_back({v, u}); // Undirected
         }
     }
 
+    // Sort and remove duplicates
     std::sort(edges.begin(), edges.end());
     edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
-    edges.shrink_to_fit();
 
-    int64_t num_edges = (int64_t)edges.size();
+    int64_t num_edges = edges.size();
     printf("  After dedup: %lld directed edges (%.1f MB edge data)\n",
            (long long)num_edges,
            (double)num_edges * sizeof(int) / (1024*1024));
@@ -308,59 +280,31 @@ inline CSRGraph generate_uniform_graph(int scale, int target_degree, const std::
     g.num_nodes = num_nodes;
     g.num_edges = num_edges;
     g.offsets_size_bytes = (num_nodes + 1) * sizeof(uint32_t);
-    g.edges_size_bytes = (size_t)num_edges * sizeof(int);
+    g.edges_size_bytes = num_edges * sizeof(int);
 
     g.row_offsets = (uint32_t*)malloc(g.offsets_size_bytes);
-    if (!g.row_offsets) {
-        fprintf(stderr, "Fatal: malloc failed for row_offsets (%zu MB)\n", g.offsets_size_bytes >> 20);
-        exit(1);
-    }
+    g.col_indices = (int*)malloc(g.edges_size_bytes);
+
     memset(g.row_offsets, 0, g.offsets_size_bytes);
 
-    // Build row_offsets (prefix sum) from edges
+    // Count degrees
     for (int64_t i = 0; i < num_edges; i++) {
-        uint32_t src = (uint32_t)(edges[i] >> 32);
-        g.row_offsets[src + 1]++;
+        g.row_offsets[edges[i].first + 1]++;
     }
-    for (uint64_t i = 1; i <= (uint64_t)num_nodes; i++) {
+
+    // Prefix sum
+    for (uint64_t i = 1; i <= num_nodes; i++) {
         g.row_offsets[i] += g.row_offsets[i-1];
     }
 
-    // Spill dst values (already in CSR order since edges is sorted) to disk,
-    // then free edges before allocating col_indices to avoid peak RAM overlap
-    std::string tmp_path = out_dir + "edges_tmp.bin";
-    {
-        FILE* tmp = fopen(tmp_path.c_str(), "wb");
-        if (!tmp) { fprintf(stderr, "Fatal: cannot open %s\n", tmp_path.c_str()); exit(1); }
-        // Write in chunks to avoid per-element call overhead
-        const int64_t CHUNK = 1 << 20; // 1M edges per chunk
-        std::vector<int> buf(CHUNK);
-        for (int64_t i = 0; i < num_edges; i += CHUNK) {
-            int64_t count = std::min(CHUNK, num_edges - i);
-            for (int64_t j = 0; j < count; j++)
-                buf[j] = (int)(edges[i + j] & 0xFFFFFFFF);
-            fwrite(buf.data(), sizeof(int), count, tmp);
-        }
-        fclose(tmp);
-    }
-    { std::vector<uint64_t>().swap(edges); }
-
-    g.col_indices = (int*)malloc(g.edges_size_bytes);
-    if (!g.col_indices) {
-        fprintf(stderr, "Fatal: malloc failed for col_indices (%zu MB)\n", g.edges_size_bytes >> 20);
-        remove(tmp_path.c_str());
-        exit(1);
-    }
-    {
-        FILE* tmp = fopen(tmp_path.c_str(), "rb");
-        if (!tmp) { fprintf(stderr, "Fatal: cannot reopen %s\n", tmp_path.c_str()); exit(1); }
-        size_t n = fread(g.col_indices, sizeof(int), num_edges, tmp);
-        fclose(tmp);
-        remove(tmp_path.c_str());
-        if ((int64_t)n != num_edges) {
-            fprintf(stderr, "Fatal: read %zu edges, expected %lld\n", n, (long long)num_edges);
-            exit(1);
-        }
+    // Fill col_indices
+    std::vector<uint32_t> current_pos(num_nodes, 0);
+    for (int64_t i = 0; i < num_edges; i++) {
+        int src = edges[i].first;
+        int dst = edges[i].second;
+        uint32_t pos = g.row_offsets[src] + current_pos[src];
+        g.col_indices[pos] = dst;
+        current_pos[src]++;
     }
 
     // Calculate and print strict quartiles

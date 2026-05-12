@@ -20,10 +20,7 @@ const int D = 128; // Dimensions
 const int C = 1024; // Number of Clusters (Centroids)
 const int MAX_ITERS = 20; // K-Means iterations
 
-// ============================================================================
-// 1. Fast GPU Dummy Data Generator
-// Uses a simple hashing algorithm to generate floats between 0.0 and 1.0
-// ============================================================================
+
 __global__ void generate_dummy_vectors(float* data, size_t total_elements, int seed) {
     size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid < total_elements) {
@@ -35,10 +32,7 @@ __global__ void generate_dummy_vectors(float* data, size_t total_elements, int s
     }
 }
 
-// ============================================================================
-// 2. K-Means Assignment Phase
-// Finds the closest centroid for each vector in the sample
-// ============================================================================
+
 __global__ void kmeans_assign(const float* sample_data, const float* centroids, 
                               int* assignments, int num_samples) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -66,10 +60,7 @@ __global__ void kmeans_assign(const float* sample_data, const float* centroids,
     assignments[tid] = best_c;
 }
 
-// ============================================================================
-// 3. K-Means Update Phase
-// Accumulates the vectors into their assigned centroids
-// ============================================================================
+
 __global__ void kmeans_update(const float* sample_data, const int* assignments, 
                               float* new_centroids, int* counts, int num_samples) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -86,10 +77,7 @@ __global__ void kmeans_update(const float* sample_data, const int* assignments,
     }
 }
 
-// ============================================================================
-// 4. K-Means Averaging Phase
-// Divides the accumulated sums by the cluster counts
-// ============================================================================
+
 __global__ void kmeans_average(float* new_centroids, const int* counts) {
     int c = blockIdx.x * blockDim.x + threadIdx.x;
     if (c >= C) return;
@@ -103,10 +91,7 @@ __global__ void kmeans_average(float* new_centroids, const int* counts) {
     }
 }
 
-// ============================================================================
-// 5. CSR Offset Builder
-// Finds the boundaries where one cluster ends and the next begins
-// ============================================================================
+
 __global__ void build_cluster_offsets(const int* sorted_assignments, int* offsets, size_t num_vectors, int C) {
     size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
     
@@ -121,7 +106,6 @@ __global__ void build_cluster_offsets(const int* sorted_assignments, int* offset
         // If the cluster ID changed, we found a boundary
         if (my_c != prev_c) {
             // Fill in the offsets for all clusters between prev_c and my_c
-            // (This handles empty clusters perfectly)
             for (int c = prev_c + 1; c <= my_c; c++) {
                 offsets[c] = tid;
             }
@@ -129,10 +113,7 @@ __global__ void build_cluster_offsets(const int* sorted_assignments, int* offset
     }
 }
 
-// ============================================================================
-// 6. Physical Reordering Kernel
-// Shuffles the raw floats so vectors in the same cluster sit contiguously
-// ============================================================================
+
 __global__ void reorder_vectors(const float* old_data, float* new_data, const int* sorted_indices, size_t num_vectors, int D) {
     size_t tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid < num_vectors) {
@@ -143,9 +124,7 @@ __global__ void reorder_vectors(const float* old_data, float* new_data, const in
     }
 }
 
-// ============================================================================
-// Main Execution
-// ============================================================================
+
 int main(int argc, char** argv) {
     int scale = 20; // Default: 2^20 = ~1 Million vectors
     std::string data_dir = "./data";
@@ -195,7 +174,7 @@ int main(int argc, char** argv) {
     generate_dummy_vectors<<<blocks, threads>>>(d_data, total_elements, 42);
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    // 3. Initialize Centroids (Steal the first C vectors from the dataset)
+    // 3. Initialize Centroids (first C vectors from the dataset)
     CHECK_CUDA(cudaMemcpy(d_centroids, d_data, centroid_bytes, cudaMemcpyDeviceToDevice));
 
     // 4. K-Means Training Loop
@@ -204,7 +183,6 @@ int main(int argc, char** argv) {
     int avg_blocks = (C + threads - 1) / threads;
 
     for (int iter = 0; iter < MAX_ITERS; iter++) {
-        // Zero out the accumulators
         CHECK_CUDA(cudaMemset(d_new_centroids, 0, centroid_bytes));
         CHECK_CUDA(cudaMemset(d_counts, 0, C * sizeof(int)));
 
@@ -225,28 +203,26 @@ int main(int argc, char** argv) {
         
         printf("  Iteration %d complete.\n", iter + 1);
     }
-// ========================================================================
-    // 5. BUILD THE INVERTED INDEX (CSR)
-    // ========================================================================
+
     printf("\nBuilding CSR Inverted Index...\n");
 
-    // 5a. Full Assignment (100% of data)
+
     int* d_full_assignments;
     CHECK_CUDA(cudaMalloc(&d_full_assignments, num_vectors * sizeof(int)));
     int full_blocks = (num_vectors + threads - 1) / threads;
     kmeans_assign<<<full_blocks, threads>>>(d_data, d_centroids, d_full_assignments, num_vectors);
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    // 5b. Generate Sequence of Vector IDs (0, 1, 2, ... N-1)
+
     int* d_vector_indices;
     CHECK_CUDA(cudaMalloc(&d_vector_indices, num_vectors * sizeof(int)));
     thrust::sequence(thrust::device, d_vector_indices, d_vector_indices + num_vectors);
 
-    // 5c. Sort IDs by Cluster Assignment
+
     printf("  Sorting vector IDs by cluster...\n");
     thrust::sort_by_key(thrust::device, d_full_assignments, d_full_assignments + num_vectors, d_vector_indices);
 
-    // 5d. Build Offsets
+
     int* d_offsets;
     CHECK_CUDA(cudaMalloc(&d_offsets, (C + 1) * sizeof(int)));
     CHECK_CUDA(cudaMemset(d_offsets, 0, (C + 1) * sizeof(int))); // Default to 0 for empty clusters
@@ -254,16 +230,14 @@ int main(int argc, char** argv) {
     build_cluster_offsets<<<full_blocks, threads>>>(d_full_assignments, d_offsets, num_vectors, C);
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    // 5e. Physically Reorder the Raw Vectors
+    // Reorder the Raw Vectors
     printf("  Physically reordering raw data for BaM alignment...\n");
     float* d_reordered_data;
     CHECK_CUDA(cudaMalloc(&d_reordered_data, data_bytes));
     reorder_vectors<<<full_blocks, threads>>>(d_data, d_reordered_data, d_vector_indices, num_vectors, D);
     CHECK_CUDA(cudaDeviceSynchronize());
 
-    // ========================================================================
-    // 6. WRITE BINARY FILES TO DISK
-    // ========================================================================
+
     printf("\nWriting CSR files to disk...\n");
     std::string centroids_file = data_dir + "centroids.bin";
 
@@ -285,8 +259,7 @@ int main(int argc, char** argv) {
     printf("  -> Saved cluster_offsets.bin\n");
 
     // Vector Indices (N ints)
-    // (Note: Since we physically sorted the data, target_vec_id == its physical index,
-    // but we save this file so you know the ORIGINAL vector IDs to return to the user).
+
     std::string vec_idx_file = data_dir + "vector_indices.bin";
     std::ofstream i_file(vec_idx_file, std::ios::binary);
     std::vector<int> h_idx_chunk(1000000);
@@ -300,7 +273,7 @@ int main(int argc, char** argv) {
     i_file.close();
     printf("  -> Saved vector_indices.bin\n");
 
-    // Reordered Raw Vectors (N * D floats)
+    // Reordered Raw Vectors
     std::string vec_file = data_dir + "raw_vectors.bin";
     std::ofstream d_file(vec_file, std::ios::binary);
     std::vector<float> h_data_chunk(100000 * D);
@@ -320,9 +293,7 @@ int main(int argc, char** argv) {
     cudaFree(d_full_assignments); cudaFree(d_vector_indices); 
     cudaFree(d_offsets); cudaFree(d_reordered_data);
 
-    // ========================================================================
-    // ANALYZE CLUSTER DISTRIBUTION
-    // ========================================================================
+
     printf("\nAnalyzing Cluster Size Distribution...\n");
     int min_size = num_vectors;
     int max_size = 0;
@@ -349,7 +320,6 @@ int main(int argc, char** argv) {
     // Sort the array from smallest to largest
     std::sort(cluster_sizes.begin(), cluster_sizes.end());
 
-    // Helper lambda to safely calculate median of a sub-array
     auto get_median = [](const std::vector<int>& v, int start, int end) -> double {
         int len = end - start;
         if (len % 2 == 0) {

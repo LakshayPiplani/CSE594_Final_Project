@@ -9,8 +9,7 @@ TLB=3
 LOG_FILE="./results/ann_results_threetier.log"
 CSV_FILE="./results/ann_results_threetier.csv"
 
-# 3. Add a trailing slash just in case the user forgot it
-# (This ensures paths like /scratch/ljp5718/knn_large work correctly)
+
 if [[ "${DATA_DIR}" != */ ]]; then
     DATA_DIR="${DATA_DIR}/"
 fi
@@ -36,7 +35,7 @@ echo " Data Directory: $DATA_DIR"
 echo "=========================================="
 
 # 4. Your sweep loops (Example: sweeping WPQ)
-for wpq in 1 2 4 8 16 32; do
+for wpq in 1 2 3 4 5 6 7 8 9 10; do
     echo "-> Running WPQ = $wpq"
     
     # Pass the DATA_DIR variable directly into your executable's --dir flag

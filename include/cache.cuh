@@ -5,106 +5,92 @@
 #include <cstdio>
 #include <cuda_runtime.h>
 
-// ============================================================================
-// BaM Software Cache v3
-//
-// Follows the real BaM page_cache.h design:
-// - Per-logical-page state array (not hash table)
-// - State + ref count packed into single atomic uint32_t
-// - Clock algorithm for cache slot allocation
-// - BUSY flag prevents concurrent load/evict races
-// - Warp coalescing with __match_any_sync
-//
-// State word layout (32 bits):
-//   Bit 31:    VALID  (data is in cache and ready)
-//   Bit 30:    BUSY   (someone is loading or evicting)
-//   Bit 29:    DIRTY  (data has been written, not flushed)
-//   Bits 28-0: Reference count (up to ~500M concurrent readers)
-//
-// Key transitions:
-//   MISS:     0x00000000 → fetch_or(BUSY)  → load → fetch_xor(BUSY|VALID)
-//   HIT:      fetch_add(count), check VALID set, use data, fetch_sub(count)
-//   EVICT:    check cnt==0 && !BUSY → fetch_or(BUSY) → writeback if DIRTY
-//             → fetch_and(CNT_MASK) clears VALID+BUSY+DIRTY
-// ============================================================================
+/*
+ Follows the real BaM page_cache.h design:
+ - Per-logical-page state array
+ - State + ref count packed into single atomic uint32_t
+ - Clock algorithm for cache slot allocation
+ - BUSY flag prevents concurrent load/evict races
 
+
+ State word layout (32 bits):
+   Bit 31:    VALID  (data is in cache and ready)
+   Bit 30:    BUSY   (someone is loading or evicting)
+   Bit 29:    DIRTY  (data has been written, not flushed)
+   Bits 28-0: Reference count (up to ~500M concurrent readers)
+
+
+*/
 // State bits
-#define ST_VALID   0x80000000U
-#define ST_BUSY    0x40000000U
-#define ST_DIRTY   0x20000000U
+#define ST_VALID 0x80000000U
+#define ST_BUSY 0x40000000U
+#define ST_DIRTY 0x20000000U
 #define ST_CNT_MASK 0x1fffffffU
 #define ST_FLAGS_MASK 0xe0000000U
 
 // Combined transitions
-#define ST_DISABLE_BUSY_ENABLE_VALID 0xc0000000U  // XOR: clears BUSY, sets VALID
-#define ST_DISABLE_BUSY_MASK         0xbfffffffU  // AND: clears only BUSY
+#define ST_DISABLE_BUSY_ENABLE_VALID 0xc0000000U // XOR: clears BUSY, sets VALID
+#define ST_DISABLE_BUSY_MASK 0xbfffffffU         // AND: clears only BUSY
 
 // State classification (upper 2 bits after shifting)
-#define ST_NV_NB  0x00U  // not valid, not busy → MISS, can load
-#define ST_NV_B   0x01U  // not valid, busy → someone else loading, wait
-#define ST_V_NB   0x02U  // valid, not busy → HIT
-#define ST_V_B    0x03U  // valid, busy → being evicted, wait
+#define ST_NV_NB 0x00U // not valid, not busy
+#define ST_NV_B 0x01U  // not valid, busy: someone else loading, wait
+#define ST_V_NB 0x02U  // valid, not busy: HIT
+#define ST_V_B 0x03U   // valid, busy: being evicted, wait
 
 #ifndef CACHE_LINE_SIZE
 #define CACHE_LINE_SIZE 4096
 #endif
 #define CL_ELEMS_INT (CACHE_LINE_SIZE / sizeof(int))
 
-// ============================================================================
-// Per-logical-page state (stored in a flat array indexed by page ID)
-// This replaces our previous hash table approach.
-// ============================================================================
+// Per-logical-page state (stored in an array indexed by page ID)
 
-struct PageState {
-    uint32_t state;    // atomic: packed VALID|BUSY|DIRTY|refcount
-    uint32_t offset;   // which cache slot holds this page's data
+struct PageState
+{
+    uint32_t state;  // atomic: packed VALID|BUSY|DIRTY|refcount
+    uint32_t offset; // which cache slot holds this page's data
 };
 
-// ============================================================================
 // Per-cache-slot metadata (for eviction tracking)
-// ============================================================================
 
-struct CacheSlotMeta {
-    uint32_t page_take_lock;  // atomic: FREE=2, UNLOCKED=0, LOCKED=1
+struct CacheSlotMeta
+{
+    uint32_t page_take_lock;   // atomic: FREE=2, UNLOCKED=0, LOCKED=1
     uint64_t page_translation; // which logical page is stored here
 };
 
-#define SLOT_FREE     2U
+#define SLOT_FREE 2U
 #define SLOT_UNLOCKED 0U
-#define SLOT_LOCKED   1U
+#define SLOT_LOCKED 1U
 
-// ============================================================================
 // Cache structure
-// ============================================================================
 
-struct BamCache {
+struct BamCache
+{
     // Cache data buffer in VRAM
-    char* d_data;              // [num_slots * CACHE_LINE_SIZE]
+    char *d_data; // [num_slots * CACHE_LINE_SIZE]
 
     // Per-logical-page state (in VRAM)
-    // Indexed by page_id: pages[page_id].state has the packed state
-    PageState* d_pages;        // [num_logical_pages]
+    // Indexed by page_id
+    PageState *d_pages;
     uint32_t num_logical_pages;
 
     // Per-cache-slot metadata (in VRAM)
-    CacheSlotMeta* d_slots;    // [num_slots]
+    CacheSlotMeta *d_slots;
     uint32_t num_slots;
 
-    // Clock eviction ticket counter
-    uint32_t* d_clock;         // single atomic counter
+    // Clock eviction counter
+    uint32_t *d_clock;
 
     // Stats
-    unsigned long long* d_hits;
-    unsigned long long* d_misses;
-    unsigned long long* d_coalesced_waits;  // threads that waited on BUSY
+    unsigned long long *d_hits;
+    unsigned long long *d_misses;
+    unsigned long long *d_coalesced_waits; // threads that waited on BUSY
 };
 
-// ============================================================================
-// Host-side initialization
-// ============================================================================
-
-inline void cache_init(BamCache* cache, size_t cache_size_bytes,
-                       uint32_t total_logical_pages) {
+inline void cache_init(BamCache *cache, size_t cache_size_bytes,
+                       uint32_t total_logical_pages)
+{
     cache->num_slots = cache_size_bytes / CACHE_LINE_SIZE;
     cache->num_logical_pages = total_logical_pages;
 
@@ -112,10 +98,11 @@ inline void cache_init(BamCache* cache, size_t cache_size_bytes,
     cudaMalloc(&cache->d_data, (size_t)cache->num_slots * CACHE_LINE_SIZE);
 
     // Per-logical-page state array
-    PageState* h_pages = (PageState*)malloc(
+    PageState *h_pages = (PageState *)malloc(
         total_logical_pages * sizeof(PageState));
-    for (uint32_t i = 0; i < total_logical_pages; i++) {
-        h_pages[i].state = 0;     // INVALID: no VALID, no BUSY, count=0
+    for (uint32_t i = 0; i < total_logical_pages; i++)
+    {
+        h_pages[i].state = 0; // INVALID: no VALID, no BUSY, count=0
         h_pages[i].offset = 0;
     }
     cudaMalloc(&cache->d_pages, total_logical_pages * sizeof(PageState));
@@ -125,9 +112,10 @@ inline void cache_init(BamCache* cache, size_t cache_size_bytes,
     free(h_pages);
 
     // Per-cache-slot metadata
-    CacheSlotMeta* h_slots = (CacheSlotMeta*)malloc(
+    CacheSlotMeta *h_slots = (CacheSlotMeta *)malloc(
         cache->num_slots * sizeof(CacheSlotMeta));
-    for (uint32_t i = 0; i < cache->num_slots; i++) {
+    for (uint32_t i = 0; i < cache->num_slots; i++)
+    {
         h_slots[i].page_take_lock = SLOT_FREE;
         h_slots[i].page_translation = 0;
     }
@@ -150,7 +138,8 @@ inline void cache_init(BamCache* cache, size_t cache_size_bytes,
     cudaMemset(cache->d_coalesced_waits, 0, sizeof(unsigned long long));
 }
 
-inline void cache_destroy(BamCache* cache) {
+inline void cache_destroy(BamCache *cache)
+{
     cudaFree(cache->d_data);
     cudaFree(cache->d_pages);
     cudaFree(cache->d_slots);
@@ -160,10 +149,12 @@ inline void cache_destroy(BamCache* cache) {
     cudaFree(cache->d_coalesced_waits);
 }
 
-inline void cache_reset(BamCache* cache) {
-    PageState* h_pages = (PageState*)malloc(
+inline void cache_reset(BamCache *cache)
+{
+    PageState *h_pages = (PageState *)malloc(
         cache->num_logical_pages * sizeof(PageState));
-    for (uint32_t i = 0; i < cache->num_logical_pages; i++) {
+    for (uint32_t i = 0; i < cache->num_logical_pages; i++)
+    {
         h_pages[i].state = 0;
         h_pages[i].offset = 0;
     }
@@ -172,9 +163,10 @@ inline void cache_reset(BamCache* cache) {
                cudaMemcpyHostToDevice);
     free(h_pages);
 
-    CacheSlotMeta* h_slots = (CacheSlotMeta*)malloc(
+    CacheSlotMeta *h_slots = (CacheSlotMeta *)malloc(
         cache->num_slots * sizeof(CacheSlotMeta));
-    for (uint32_t i = 0; i < cache->num_slots; i++) {
+    for (uint32_t i = 0; i < cache->num_slots; i++)
+    {
         h_slots[i].page_take_lock = SLOT_FREE;
         h_slots[i].page_translation = 0;
     }
@@ -189,13 +181,15 @@ inline void cache_reset(BamCache* cache) {
     cudaMemset(cache->d_coalesced_waits, 0, sizeof(unsigned long long));
 }
 
-struct CacheStats {
+struct CacheStats
+{
     unsigned long long hits;
     unsigned long long misses;
     unsigned long long coalesced_waits;
 };
 
-inline CacheStats cache_get_stats(BamCache* cache) {
+inline CacheStats cache_get_stats(BamCache *cache)
+{
     CacheStats s;
     cudaMemcpy(&s.hits, cache->d_hits,
                sizeof(unsigned long long), cudaMemcpyDeviceToHost);
@@ -206,75 +200,78 @@ inline CacheStats cache_get_stats(BamCache* cache) {
     return s;
 }
 
-// ============================================================================
 // Device-side: find_slot (clock eviction)
-// Matches real BaM's page_cache_d_t::find_slot
-// ============================================================================
 
 __device__ __forceinline__
-uint32_t cache_find_slot(BamCache* cache, uint32_t page_id) {
+    uint32_t
+    cache_find_slot(BamCache *cache, uint32_t page_id)
+{
     unsigned int ns = 8;
 
-    while (true) {
+    while (true)
+    {
         uint32_t slot = atomicAdd(cache->d_clock, 1) % cache->num_slots;
 
-        uint32_t v = atomicAdd((unsigned int*)&cache->d_slots[slot].page_take_lock, 0);
+        uint32_t v = atomicAdd((unsigned int *)&cache->d_slots[slot].page_take_lock, 0);
 
-        // Slot never used — take it directly
-        if (v == SLOT_FREE) {
+        // Slot never used, take it directly
+        if (v == SLOT_FREE)
+        {
             uint32_t old = atomicCAS(&cache->d_slots[slot].page_take_lock,
-                                      SLOT_FREE, SLOT_LOCKED);
-            if (old == SLOT_FREE) {
+                                     SLOT_FREE, SLOT_LOCKED);
+            if (old == SLOT_FREE)
+            {
                 cache->d_slots[slot].page_translation = page_id;
                 __threadfence();
                 atomicExch(&cache->d_slots[slot].page_take_lock, SLOT_UNLOCKED);
                 return slot;
             }
         }
-        // Slot previously used — try to evict
-        else if (v == SLOT_UNLOCKED) {
+        // Slot previously used, try to evict
+        else if (v == SLOT_UNLOCKED)
+        {
             uint32_t old = atomicCAS(&cache->d_slots[slot].page_take_lock,
-                                      SLOT_UNLOCKED, SLOT_LOCKED);
-            if (old == SLOT_UNLOCKED) {
+                                     SLOT_UNLOCKED, SLOT_LOCKED);
+            if (old == SLOT_UNLOCKED)
+            {
                 uint32_t prev_page = (uint32_t)cache->d_slots[slot].page_translation;
 
                 // Check if previous occupant can be evicted
                 uint32_t prev_state = atomicAdd(
-                    (unsigned int*)&cache->d_pages[prev_page].state, 0);
+                    (unsigned int *)&cache->d_pages[prev_page].state, 0);
                 uint32_t cnt = prev_state & ST_CNT_MASK;
                 uint32_t busy = prev_state & ST_BUSY;
 
-                if (cnt == 0 && busy == 0) {
+                if (cnt == 0 && busy == 0)
+                {
                     // Try to set BUSY on the old page
                     uint32_t old_state = atomicOr(
-                        (unsigned int*)&cache->d_pages[prev_page].state,
+                        (unsigned int *)&cache->d_pages[prev_page].state,
                         ST_BUSY);
 
                     if ((old_state & ST_BUSY) == 0 &&
-                        (old_state & ST_CNT_MASK) == 0) {
+                        (old_state & ST_CNT_MASK) == 0)
+                    {
                         // Successfully locked old page for eviction
-                        // Clear flags (VALID, BUSY, DIRTY) but preserve
-                        // any ref count that another thread might have
-                        // added between our check and now.
-                        // Since we verified cnt==0 and set BUSY, and
-                        // acquire_page checks BUSY before proceeding,
-                        // no new refs should appear. But be safe:
+                        // Clear flags (VALID, BUSY, DIRTY) but preserve any ref count that another thread might have added between our check and now.
+
                         uint32_t cleared = atomicAnd(
-                            (unsigned int*)&cache->d_pages[prev_page].state,
-                            ST_CNT_MASK);  // keep only count bits
+                            (unsigned int *)&cache->d_pages[prev_page].state,
+                            ST_CNT_MASK);
 
                         // Verify count is still zero after clearing flags
-                        if ((cleared & ST_CNT_MASK) != 0) {
-                            // Someone snuck in — restore VALID, remove BUSY
+                        if ((cleared & ST_CNT_MASK) != 0)
+                        {
+                            // Someone snuck in, restore VALID, remove BUSY
                             atomicOr(
-                                (unsigned int*)&cache->d_pages[prev_page].state,
+                                (unsigned int *)&cache->d_pages[prev_page].state,
                                 ST_VALID);
                             atomicAnd(
-                                (unsigned int*)&cache->d_pages[prev_page].state,
+                                (unsigned int *)&cache->d_pages[prev_page].state,
                                 ST_DISABLE_BUSY_MASK);
-                            // Failed to evict — release slot and try another
+                            // Failed to evict, release slot and try another
                             atomicExch(&cache->d_slots[slot].page_take_lock,
-                                        SLOT_UNLOCKED);
+                                       SLOT_UNLOCKED);
                             goto next_slot;
                         }
 
@@ -282,79 +279,77 @@ uint32_t cache_find_slot(BamCache* cache, uint32_t page_id) {
                         cache->d_slots[slot].page_translation = page_id;
                         __threadfence();
                         atomicExch(&cache->d_slots[slot].page_take_lock,
-                                    SLOT_UNLOCKED);
+                                   SLOT_UNLOCKED);
                         return slot;
-                    } else {
-                        // Race: someone else grabbed it, clear our BUSY
+                    }
+                    else
+                    {
+                        // Someone else grabbed it
                         atomicAnd(
-                            (unsigned int*)&cache->d_pages[prev_page].state,
+                            (unsigned int *)&cache->d_pages[prev_page].state,
                             ST_DISABLE_BUSY_MASK);
                     }
                 }
 
-                // Failed to evict — unlock slot and try another
+                // Failed to evict, unlock slot and try another
                 atomicExch(&cache->d_slots[slot].page_take_lock, SLOT_UNLOCKED);
             }
         }
-        // Slot is LOCKED by another thread — skip
-next_slot:
+        // Slot is LOCKED by another thread
+    next_slot:
 
 #if defined(__CUDACC__) && (__CUDA_ARCH__ >= 700)
         __nanosleep(ns);
-        if (ns < 256) ns *= 2;
+        if (ns < 256)
+            ns *= 2;
 #endif
-;
+        ;
     }
 }
 
-// ============================================================================
-// Device-side: copy data from backing store to cache
-// ============================================================================
-
-__device__ __forceinline__
-void cache_fill(BamCache* cache, uint32_t slot, uint32_t page_id,
-                const char* backing_store) {
-    const int4* src = (const int4*)(backing_store +
-                     (uint64_t)page_id * CACHE_LINE_SIZE);
-    int4* dst = (int4*)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE);
+__device__ __forceinline__ void cache_fill(BamCache *cache, uint32_t slot, uint32_t page_id,
+                                           const char *backing_store)
+{
+    const int4 *src = (const int4 *)(backing_store +
+                                     (uint64_t)page_id * CACHE_LINE_SIZE);
+    int4 *dst = (int4 *)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE);
     int num_int4_elements = CL_ELEMS_INT / 4;
-    for (int i = 0; i < num_int4_elements; i++) {
+    for (int i = 0; i < num_int4_elements; i++)
+    {
         dst[i] = src[i];
     }
     __threadfence();
 }
 
-// ============================================================================
-// Device-side: acquire_page
-// Matches real BaM's range_d_t::acquire_page
-//
-// Returns the cache slot number where data is available
-// ============================================================================
-
 __device__ __forceinline__
-uint32_t cache_acquire_page(BamCache* cache, uint32_t page_id,
-                            uint32_t count, const char* backing_store) {
+    uint32_t
+    cache_acquire_page(BamCache *cache, uint32_t page_id,
+                       uint32_t count, const char *backing_store)
+{
     unsigned int ns = 8;
 
-    // Atomically increment ref count AND read previous state — done ONCE
-    // This count stays in the state word until the caller releases it.
-    // Because cnt > 0, find_slot will never evict this page while we hold it.
+    // Atomically increment ref countt, read previous state
     uint32_t read_state = atomicAdd(
-        (unsigned int*)&cache->d_pages[page_id].state, count);
+        (unsigned int *)&cache->d_pages[page_id].state, count);
 
     bool fail = true;
-    do {
+    do
+    {
         uint32_t st = (read_state >> 30) & 0x03;
 
-        switch (st) {
-        // Not valid, not busy → MISS
-        case ST_NV_NB: {
+        switch (st)
+        {
+        // Not valid, not busy: MISS
+        case ST_NV_NB:
+        {
             uint32_t old = atomicOr(
-                (unsigned int*)&cache->d_pages[page_id].state, ST_BUSY);
+                (unsigned int *)&cache->d_pages[page_id].state, ST_BUSY);
 
-            if ((old & ST_BUSY) == 0) {
+            if ((old & ST_BUSY) == 0)
+            {
                 uint32_t old_st = (old >> 30) & 0x03;
-                if (old_st == ST_NV_NB) {
+                if (old_st == ST_NV_NB)
+                {
                     uint32_t slot = cache_find_slot(cache, page_id);
 
                     atomicAdd(cache->d_misses, 1ULL);
@@ -364,27 +359,30 @@ uint32_t cache_acquire_page(BamCache* cache, uint32_t page_id,
 
                     __threadfence();
                     atomicXor(
-                        (unsigned int*)&cache->d_pages[page_id].state,
+                        (unsigned int *)&cache->d_pages[page_id].state,
                         ST_DISABLE_BUSY_ENABLE_VALID);
 
                     return slot;
-                } else {
-                    // State changed — clear BUSY and retry
+                }
+                else
+                {
+                    // State changed: clear BUSY and retry
                     atomicAnd(
-                        (unsigned int*)&cache->d_pages[page_id].state,
+                        (unsigned int *)&cache->d_pages[page_id].state,
                         ST_DISABLE_BUSY_MASK);
                 }
             }
             break;
         }
 
-        // Valid, not busy → HIT
-        case ST_V_NB: {
+        // Valid, not busy: HIT
+        case ST_V_NB:
+        {
             atomicAdd(cache->d_hits, 1ULL);
             return cache->d_pages[page_id].offset;
         }
 
-        // Busy (loading or evicting) → spin
+        // Busy
         case ST_NV_B:
         case ST_V_B:
         default:
@@ -392,45 +390,34 @@ uint32_t cache_acquire_page(BamCache* cache, uint32_t page_id,
             break;
         }
 
-        // Backoff and re-read state (load only, do NOT add count again)
+        // Backoff and re-read state (load only, dont add count again)
 #if defined(__CUDACC__) && (__CUDA_ARCH__ >= 700)
         __nanosleep(ns);
-        if (ns < 256) ns *= 2;
+        if (ns < 256)
+            ns *= 2;
 #endif
-        // Use volatile read through atomicAdd(..., 0) to get current state
-        // Our count is still in there — find_slot sees cnt > 0 and skips us
+
         read_state = atomicAdd(
-            (unsigned int*)&cache->d_pages[page_id].state, 0);
+            (unsigned int *)&cache->d_pages[page_id].state, 0);
 
     } while (true);
 }
 
-// ============================================================================
-// Device-side: release_page
-// ============================================================================
-
-__device__ __forceinline__
-void cache_release_page(BamCache* cache, uint32_t page_id, uint32_t count) {
-    atomicSub((unsigned int*)&cache->d_pages[page_id].state, count);
+__device__ __forceinline__ void cache_release_page(BamCache *cache, uint32_t page_id, uint32_t count)
+{
+    atomicSub((unsigned int *)&cache->d_pages[page_id].state, count);
 }
 
-// ============================================================================
-// Core read — WITHOUT warp coalescing
-// ============================================================================
-
-__device__ __forceinline__
-int cache_read_no_coalesce(BamCache* cache, int index,
-                           const char* backing_store) {
+__device__ __forceinline__ int cache_read_no_coalesce(BamCache *cache, int index,
+                                                      const char *backing_store)
+{
     uint32_t page_id = index / CL_ELEMS_INT;
-    uint32_t offset  = index % CL_ELEMS_INT;
+    uint32_t offset = index % CL_ELEMS_INT;
 
     uint32_t slot = cache_acquire_page(cache, page_id, 1, backing_store);
 
-    int val = ((int*)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE))[offset];
+    int val = ((int *)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE))[offset];
 
-    // Ensure read completes before we drop the ref count
-    // Without this, the compiler/GPU can reorder the load after the atomicSub,
-    // allowing find_slot to evict the slot before we finish reading
     __threadfence();
 
     cache_release_page(cache, page_id, 1);
@@ -438,18 +425,12 @@ int cache_read_no_coalesce(BamCache* cache, int index,
     return val;
 }
 
-// ============================================================================
-// Core read — WITH warp coalescing (full BaM approach)
-// Exactly matches real BaM's seq_read pattern:
-//   coalesce_page → read → __syncwarp(eq) → release → __syncwarp(active)
-// ============================================================================
-
-__device__ __forceinline__
-int cache_read_coalesced(BamCache* cache, int index,
-                         const char* backing_store) {
+__device__ __forceinline__ int cache_read_coalesced(BamCache *cache, int index,
+                                                    const char *backing_store)
+{
     uint32_t page_id = index / CL_ELEMS_INT;
-    uint32_t offset  = index % CL_ELEMS_INT;
-    uint32_t lane    = threadIdx.x % 32;
+    uint32_t offset = index % CL_ELEMS_INT;
+    uint32_t lane = threadIdx.x % 32;
 
     // Step 1: Warp coalescing — group threads by page_id
     unsigned active = __activemask();
@@ -459,7 +440,8 @@ int cache_read_coalesced(BamCache* cache, int index,
 
     // Step 2: Only master acquires the page (with count for whole group)
     uint32_t slot;
-    if ((int)lane == master) {
+    if ((int)lane == master)
+    {
         slot = cache_acquire_page(cache, page_id, count, backing_store);
     }
 
@@ -467,18 +449,19 @@ int cache_read_coalesced(BamCache* cache, int index,
     slot = __shfl_sync(eq_mask, slot, master);
 
     // Step 4: Every thread reads its own element
-    int val = ((int*)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE))[offset];
+    int val = ((int *)(cache->d_data + (uint64_t)slot * CACHE_LINE_SIZE))[offset];
 
     // Step 5: Ensure all reads complete before releasing ref count
     __threadfence();
     __syncwarp(eq_mask);
 
     // Step 6: Master releases ref count for entire group
-    if ((int)lane == master) {
+    if ((int)lane == master)
+    {
         cache_release_page(cache, page_id, count);
     }
 
-    // Step 7: Sync all active threads — matches real BaM's second syncwarp
+    // Step 7: Sync all active threads
     __syncwarp(active);
 
     return val;

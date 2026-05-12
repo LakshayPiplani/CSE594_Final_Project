@@ -2,6 +2,7 @@
 
 
 DATA_DIR=/scratch/ljp5718/bfs_data
+mkdir -p "$DATA_DIR"
 SCALE=20
 TARGET_DEGREE=2048
 CACHE_PERC=0.1
@@ -14,13 +15,13 @@ CSV_FILE="./results/bfs_results_threetier.csv"
 echo "=========================================="
 echo "Compling BFS Data Generation code"
 echo "=========================================="
-# g++ -Iinclude -O3 -fopenmp ./src/gen_bfs_data.cpp -o gen_bfs_data
+g++ -Iinclude -O3 -fopenmp ./src/gen_bfs_data.cpp -o gen_bfs_data
 
 echo "=========================================="
 echo "Generating BFS Data"
 echo "=========================================="
 mkdir -p "$DATA_DIR"
-# gen_bfs_data --scale "$SCALE" --target_degree "$TARGET_DEGREE" --graph_type uniform --out_dir "$DATA_DIR"
+gen_bfs_data --scale "$SCALE" --target_degree "$TARGET_DEGREE" --graph_type uniform --out_dir "$DATA_DIR"
 
 echo "=========================================="
 echo "Compling BFS Benchmnark code"
